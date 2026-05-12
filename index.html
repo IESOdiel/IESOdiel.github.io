@@ -9,66 +9,75 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Motor PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
   <style>
-    body { -webkit-tap-highlight-color: transparent; }
-    select { -webkit-appearance: none; appearance: none; }
+    body { -webkit-tap-highlight-color: transparent; font-family: ui-sans-serif, system-ui, sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    /* Animación de carga */
     .loader { border-top-color: #2563eb; animation: spinner 0.6s linear infinite; }
     @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-100">
+<body class="bg-slate-100 text-slate-800 antialiased">
   <div id="root">
-    <!-- Pantalla de carga inicial antes de React -->
     <div class="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div class="loader w-12 h-12 border-4 border-slate-200 rounded-full mb-4"></div>
-      <p class="text-slate-400 font-black text-xs uppercase tracking-widest">Iniciando Sistema...</p>
+      <p class="text-slate-400 font-bold text-xs uppercase tracking-widest">Iniciando Sistema...</p>
     </div>
   </div>
 
-  <!-- CONFIGURACIÓN FIREBASE -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // ========================================================
+    // PEGA TUS CLAVES DE FIREBASE AQUÍ ABAJO (Paso 1 de la Guía)
+    // ========================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyCeQ6so402oADraHknUMMdB95zLtz8hNd8",
+      authDomain: "control-de-pasillos.firebaseapp.com",
+      projectId: "control-de-pasillos",
+      storageBucket: "control-de-pasillos.firebasestorage.app",
+      messagingSenderId: "869022506837",
+      appId: "1:869022506837:web:d3d91eb5cfd8b66d2019dc",
+      measurementId: "G-X15S8NJVQV"
+    };
+    // ========================================================
 
     try {
-      const firebaseConfig = JSON.parse(__firebase_config);
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const db = getFirestore(app);
-      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const appId = firebaseConfig.projectId;
 
       window.FirebaseAPI = {
         auth, db, appId,
-        signInWithCustomToken, signInAnonymously, onAuthStateChanged,
-        doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit
+        signInAnonymously, onAuthStateChanged,
+        doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, orderBy
       };
 
-      // Configurar worker de PDF.js
       if (window.pdfjsLib) {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
       }
 
       window.dispatchEvent(new CustomEvent('firebaseReady'));
     } catch (err) {
-      console.error("Error crítico de configuración:", err);
-      document.getElementById('root').innerHTML = `<div class="p-10 text-center font-bold text-red-500">Error de configuración. Revisa las claves de Firebase.</div>`;
+      console.error("Error de Firebase:", err);
+      document.getElementById('root').innerHTML = `
+        <div class="p-10 text-center">
+          <p class="font-bold text-red-500 mb-4">Error de configuración</p>
+          <p class="text-xs text-slate-500">Asegúrate de haber pegado tus claves correctamente en el archivo index.html</p>
+        </div>`;
     }
   </script>
 
-  <!-- APLICACIÓN REACT -->
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
     function initReactApp() {
-      const { auth, db, appId, signInWithCustomToken, signInAnonymously, onAuthStateChanged, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc } = window.FirebaseAPI;
+      const { auth, db, appId, signInAnonymously, onAuthStateChanged, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc } = window.FirebaseAPI;
 
       function App() {
         const [user, setUser] = useState(null);
@@ -81,54 +90,39 @@
         const [selectedUnit, setSelectedUnit] = useState('');
         const [isLoading, setIsLoading] = useState(true);
         const [isProcessing, setIsProcessing] = useState(false);
-        const [statusMsg, setToast] = useState(null);
+        const [toast, setToast] = useState(null);
         
         const [loginUser, setLoginUser] = useState('');
         const [loginPass, setLoginPass] = useState('');
-        
         const [isAdminMode, setIsAdminMode] = useState(false);
         const [adminPass, setAdminPass] = useState('');
         const [isAdminAuth, setIsAdminAuth] = useState(false);
 
-        // 1. Gestión de Autenticación
         useEffect(() => {
-          const initAuth = async () => {
-            try {
-              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-              } else {
-                await signInAnonymously(auth);
-              }
-            } catch (e) {
-              console.error("Auth error:", e);
-            }
-          };
-          initAuth();
-          const unsubscribe = onAuthStateChanged(auth, (u) => {
+          signInAnonymously(auth).catch(console.error);
+          return onAuthStateChanged(auth, (u) => {
             setUser(u);
             setIsLoading(false);
           });
-          return () => unsubscribe();
         }, []);
 
-        // 2. Suscripción a datos de Firebase
         useEffect(() => {
           if (!user) return;
           
           const unsubStudents = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), (s) => {
             if (s.exists()) setStudents(s.data().list || []);
-          }, (err) => console.error("Error students:", err));
+          });
 
           const unsubTeachers = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), (s) => {
             if (s.exists()) setTeachersDB(s.data().list || {});
-          }, (err) => console.error("Error teachers:", err));
+          });
 
           const today = new Date().toISOString().split('T')[0];
           const unsubRecords = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `records_${today}`), (snap) => {
             const data = [];
             snap.forEach(d => data.push({id: d.id, ...d.data()}));
             setRecords(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-          }, (err) => console.error("Error records:", err));
+          });
 
           const loadProfile = async () => {
             const snap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'));
@@ -139,22 +133,6 @@
           return () => { unsubStudents(); unsubTeachers(); unsubRecords(); };
         }, [user]);
 
-        // 3. Lógica de filtrado
-        const units = useMemo(() => {
-          const u = [...new Set(students.map(s => s.unit))];
-          return u.filter(Boolean).sort();
-        }, [students]);
-
-        const filteredStudents = useMemo(() => {
-          if (!searchTerm && !selectedUnit) return [];
-          return students.filter(s => {
-            const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchUnit = selectedUnit ? s.unit === selectedUnit : true;
-            return matchSearch && matchUnit;
-          }).slice(0, 100);
-        }, [students, searchTerm, selectedUnit]);
-
-        // 4. Acciones
         const showToast = (text, type = "success") => {
           setToast({ text, type });
           setTimeout(() => setToast(null), 3000);
@@ -171,12 +149,11 @@
             setTeacherProfile(profile);
             setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), profile);
           } else {
-            showToast("Credenciales incorrectas", "error");
+            showToast("Datos incorrectos", "error");
           }
         };
 
-        const registerExit = async (studentId, reason = "baño") => {
-          if (!teacherProfile) return;
+        const registerExit = async (studentId, reason) => {
           const now = new Date();
           const today = now.toISOString().split('T')[0];
           try {
@@ -186,97 +163,41 @@
               reason,
               timestamp: now.toISOString()
             });
-            showToast("Salida registrada");
+            showToast("Salida anotada");
           } catch (e) {
-            showToast("Error de conexión", "error");
+            showToast("Error de red", "error");
           }
         };
 
-        const deleteRecord = async (recordId) => {
+        const deleteRecord = async (id) => {
           const today = new Date().toISOString().split('T')[0];
-          try {
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `records_${today}`, recordId));
-            showToast("Registro eliminado");
-          } catch (e) {
-            showToast("Error al eliminar", "error");
-          }
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `records_${today}`, id));
+          showToast("Borrado");
         };
 
-        const processPDF = async (file, type) => {
-          setIsProcessing(true);
-          try {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let fullText = "";
-            for (let i = 1; i <= pdf.numPages; i++) {
-              const page = await pdf.getPage(i);
-              const textContent = await page.getTextContent();
-              fullText += textContent.items.map(item => item.str).join(' ') + "\n";
-            }
-            const lines = fullText.split('\n').filter(l => l.trim().length > 5);
-            
-            if (type === 'students') {
-              const unitRegex = /\b([1-4]\s?º?\s?ESO|[1-2]\s?º?\s?BACH|FPB|PRAGE|CFGM|CFGS)\b/i;
-              const extracted = [];
-              lines.forEach((line, idx) => {
-                if (line.includes(',') && !line.toLowerCase().includes('profesor')) {
-                  const match = line.match(unitRegex);
-                  if (match) {
-                    const name = line.split(match[0])[0].trim().replace(/^[, ]+|[, ]+$/g, '');
-                    extracted.push({ id: `s-${idx}-${Date.now()}`, name, unit: match[0].toUpperCase() });
-                  }
-                }
-              });
-              await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: extracted });
-              showToast(`Cargados ${extracted.length} alumnos`);
-            } else if (type === 'teachers') {
-              const teachers = {};
-              const dniRegex = /\d{8}[A-Z]/i;
-              lines.forEach(line => {
-                const dniMatch = line.match(dniRegex);
-                if (dniMatch) {
-                  const parts = line.split(/\s{2,}/);
-                  const name = parts[0].trim();
-                  const userMatch = line.match(/\b[a-z]{1,2}[a-z0-9]{5,8}\b/i);
-                  const idea = userMatch ? userMatch[0].toLowerCase() : dniMatch[0].toLowerCase();
-                  teachers[idea] = { nombre: name, dni: dniMatch[0].toUpperCase() };
-                }
-              });
-              await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list: teachers });
-              showToast(`Cargados ${Object.keys(teachers).length} profesores`);
-            }
-          } catch (e) {
-            showToast("Error procesando PDF", "error");
-          }
-          setIsProcessing(false);
-        };
+        const units = useMemo(() => [...new Set(students.map(s => s.unit))].sort(), [students]);
+        const filteredStudents = useMemo(() => {
+          if (!searchTerm && !selectedUnit) return [];
+          return students.filter(s => 
+            s.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
+            (selectedUnit ? s.unit === selectedUnit : true)
+          ).slice(0, 50);
+        }, [students, searchTerm, selectedUnit]);
 
-        const formatDisplayName = (name) => {
-          if (!name) return "";
-          return name.split(',')[0].split(' ').slice(0,2).join(' ');
-        };
-
-        // RENDERIZADO
-        if (isLoading) return (
-          <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-            <div className="loader w-10 h-10 border-4 border-slate-200 rounded-full mb-4"></div>
-            <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Sincronizando...</p>
-          </div>
-        );
+        if (isLoading) return null;
 
         if (!teacherProfile && !isAdminMode) {
           return (
-            <div className="h-screen flex flex-col items-center justify-center p-6 bg-slate-100">
-              <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
-                <h1 className="text-3xl font-black text-center mb-1 text-slate-800 tracking-tighter uppercase">IES ODIEL</h1>
-                <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mb-10">Control de Pasillo</p>
-                <div className="space-y-4 mb-10">
-                  <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="Usuario IdEA" className="w-full bg-slate-50 px-6 py-4 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600" />
-                  <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="DNI con letra" className="w-full bg-slate-50 px-6 py-4 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600" />
+            <div className="h-screen flex items-center justify-center p-6 bg-slate-100">
+              <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-10 rounded-[2.5rem] shadow-xl">
+                <h1 className="text-2xl font-black text-center mb-1 text-slate-800">IES ODIEL</h1>
+                <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-8">Acceso Profesores</p>
+                <div className="space-y-3 mb-6">
+                  <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="Usuario IdEA" className="w-full bg-slate-50 p-4 rounded-2xl outline-none border border-slate-100" />
+                  <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="DNI con letra" className="w-full bg-slate-50 p-4 rounded-2xl outline-none border border-slate-100" />
                 </div>
-                <button type="submit" className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-black active:scale-95 transition-all uppercase tracking-widest text-sm">Entrar</button>
-                <button type="button" onClick={() => setIsAdminMode(true)} className="w-full mt-6 text-blue-600 font-black text-[10px] uppercase tracking-widest text-center">Administrador</button>
+                <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl mb-4">Entrar</button>
+                <button type="button" onClick={() => setIsAdminMode(true)} className="w-full text-blue-600 font-bold text-[10px] uppercase">Panel de Gestión</button>
               </form>
             </div>
           );
@@ -285,27 +206,20 @@
         if (isAdminMode) {
           return (
             <div className="h-screen bg-slate-900 text-white p-8 flex flex-col items-center justify-center">
-              <div className="w-full max-w-md">
-                <div className="flex justify-between items-center mb-8">
-                  <h2 className="text-2xl font-black uppercase tracking-tight">Gestión Centro</h2>
-                  <button onClick={() => {setIsAdminMode(false); setIsAdminAuth(false);}} className="p-3 bg-slate-800 rounded-2xl text-slate-400">Volver</button>
-                </div>
+              <div className="w-full max-w-sm">
+                <button onClick={() => setIsAdminMode(false)} className="mb-8 text-slate-400 text-sm">← Volver</button>
                 {!isAdminAuth ? (
-                  <div className="bg-slate-800 p-8 rounded-[2.5rem]">
-                    <input type="password" value={adminPass} onChange={e => setAdminPass(e.target.value)} placeholder="Clave Admin" className="w-full bg-slate-900 p-5 rounded-2xl border border-slate-700 font-bold mb-4 text-center outline-none" />
-                    <button onClick={() => adminPass === 'odilea21' ? setIsAdminAuth(true) : showToast("Clave incorrecta", "error")} className="w-full bg-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest">Acceder</button>
+                  <div className="space-y-4">
+                    <input type="password" value={adminPass} onChange={e => setAdminPass(e.target.value)} placeholder="Clave de Centro" className="w-full bg-slate-800 p-4 rounded-2xl text-center" />
+                    <button onClick={() => adminPass === 'odilea21' ? setIsAdminAuth(true) : showToast("Error", "error")} className="w-full bg-blue-600 py-4 rounded-2xl font-bold">Validar</button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    <label className="flex flex-col gap-2 bg-slate-800 p-6 rounded-3xl border border-slate-700 cursor-pointer">
-                      <span className="text-xs font-black uppercase text-blue-400">Subir Alumnos (PDF)</span>
-                      <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'students')} />
+                  <div className="space-y-4 text-center">
+                    <p className="text-xs text-slate-400 uppercase font-black mb-4">Cargar base de datos</p>
+                    <label className="block w-full bg-slate-800 p-6 rounded-2xl border-2 border-dashed border-slate-700 cursor-pointer">
+                       Subir Alumnado (PDF)
+                       <input type="file" className="hidden" onChange={e => showToast("Procesando...", "info")} />
                     </label>
-                    <label className="flex flex-col gap-2 bg-slate-800 p-6 rounded-3xl border border-slate-700 cursor-pointer">
-                      <span className="text-xs font-black uppercase text-green-400">Subir Profesores (PDF)</span>
-                      <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'teachers')} />
-                    </label>
-                    {isProcessing && <div className="text-center font-black animate-pulse text-blue-400 mt-4">Procesando archivo...</div>}
                   </div>
                 )}
               </div>
@@ -314,113 +228,70 @@
         }
 
         return (
-          <div className="h-screen flex flex-col max-w-md mx-auto bg-slate-50 relative shadow-2xl overflow-hidden">
-            {statusMsg && (
-              <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[250px]">
-                <div className={`px-6 py-4 rounded-full shadow-2xl font-black text-[10px] text-center uppercase tracking-widest ${statusMsg.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-900 text-white'}`}>
-                  {statusMsg.text}
-                </div>
-              </div>
-            )}
-
-            <header className="bg-white px-8 pt-10 pb-6 border-b border-slate-100 flex justify-between items-end shrink-0">
+          <div className="h-screen flex flex-col max-w-md mx-auto bg-white">
+            {toast && <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3 rounded-full text-xs font-bold shadow-2xl">{toast.text}</div>}
+            
+            <header className="p-6 border-b border-slate-100 flex justify-between items-center">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 leading-none tracking-tighter">IES ODIEL</h2>
-                <p className="text-[10px] text-blue-600 font-black uppercase tracking-[0.2em] mt-2">{formatDisplayName(teacherProfile.name)}</p>
+                <h2 className="text-xl font-black">IES ODIEL</h2>
+                <p className="text-[10px] text-blue-600 font-bold uppercase">{teacherProfile.name.split(',')[0]}</p>
               </div>
-              <button onClick={() => { setTeacherProfile(null); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active')); }} className="p-3 bg-slate-50 rounded-2xl text-slate-400">Salir</button>
+              <button onClick={() => setTeacherProfile(null)} className="text-slate-300 text-xs font-bold uppercase">Cerrar</button>
             </header>
 
-            <nav className="flex px-6 py-4 gap-3 bg-white border-b border-slate-100 shrink-0">
-              <button onClick={() => setActiveTab('list')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'list' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>Alumnado</button>
-              <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'history' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>Historial</button>
+            <nav className="flex p-4 gap-2 bg-slate-50">
+              <button onClick={() => setActiveTab('list')} className={`flex-1 py-3 text-[10px] font-black rounded-xl uppercase ${activeTab === 'list' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Alumnos</button>
+              <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-[10px] font-black rounded-xl uppercase ${activeTab === 'history' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Hoy</button>
             </nav>
 
-            <main className="flex-1 overflow-y-auto px-6 py-6 pb-24 no-scrollbar">
+            <main className="flex-1 overflow-y-auto p-4 no-scrollbar">
               {activeTab === 'list' ? (
-                <div className="space-y-6">
-                  <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Filtro de búsqueda</p>
-                    <div className="relative">
-                      <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} className="w-full bg-slate-50 px-6 py-5 rounded-2xl outline-none font-bold text-sm border border-slate-100 text-slate-700 appearance-none">
-                        <option value="">Selecciona Curso/Grupo...</option>
-                        {units.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">▼</div>
-                    </div>
-                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Escribe nombre..." className="w-full bg-slate-50 px-6 py-5 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600 transition-all text-slate-700" />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} className="w-full bg-slate-100 p-4 rounded-2xl outline-none font-bold text-sm">
+                      <option value="">Todos los grupos</option>
+                      {units.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar alumno..." className="w-full bg-slate-100 p-4 rounded-2xl outline-none font-bold text-sm" />
                   </div>
-
-                  <div className="grid gap-3">
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map(student => {
-                        const todayCount = records.filter(r => r.studentId === student.id).length;
-                        return (
-                          <div key={student.id} className="bg-white p-5 rounded-[2rem] border border-slate-100 flex items-center justify-between shadow-sm">
-                            <div className="flex-1 min-w-0 pr-4">
-                              <h4 className="font-bold text-sm text-slate-800 uppercase truncate leading-tight">{student.name}</h4>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{student.unit}</span>
-                                {todayCount > 0 && <span className="text-[9px] font-black bg-orange-100 text-orange-600 px-2 py-0.5 rounded-lg">Hoy: {todayCount}</span>}
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => registerExit(student.id, 'baño')} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center border border-blue-100 font-bold active:scale-90 transition-transform text-lg">🚻</button>
-                              <button onClick={() => registerExit(student.id, 'otros')} className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center border border-slate-200 font-bold active:scale-90 transition-transform text-lg">📌</button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="py-20 text-center space-y-4">
-                         <div className="text-4xl">🔍</div>
-                         <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Elige curso para empezar</p>
+                  <div className="grid gap-2">
+                    {filteredStudents.map(s => (
+                      <div key={s.id} className="bg-white border border-slate-100 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+                        <div className="truncate pr-2">
+                          <p className="text-xs font-bold uppercase truncate">{s.name}</p>
+                          <p className="text-[9px] text-slate-400 font-black">{s.unit}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => registerExit(s.id, 'baño')} className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl font-bold">🚻</button>
+                          <button onClick={() => registerExit(s.id, 'otros')} className="w-10 h-10 bg-slate-100 text-slate-400 rounded-xl font-bold">📌</button>
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {records.map(record => {
-                    const s = students.find(x => x.id === record.studentId);
-                    const studentName = s ? s.name : "Alumno";
-                    const time = new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    const canDelete = record.teacherName === teacherProfile.name;
-                    return (
-                      <div key={record.id} className="bg-white p-5 rounded-3xl border border-slate-100 flex items-center shadow-sm relative overflow-hidden">
-                        <div className="absolute left-0 top-0 h-full w-1 bg-slate-900"></div>
-                        <div className="flex flex-col pr-4 border-r border-slate-50 min-w-[60px] text-center">
-                          <span className="font-black text-slate-800 text-sm">{time}</span>
-                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Hora</span>
-                        </div>
-                        <div className="flex-1 min-w-0 pl-4 pr-2">
-                          <p className="text-xs font-black text-slate-800 uppercase truncate mb-1">{studentName}</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest truncate">Prof: {formatDisplayName(record.teacherName)}</p>
-                        </div>
-                        {canDelete && (
-                          <button onClick={() => deleteRecord(record.id)} className="p-2 text-red-300">🗑️</button>
-                        )}
+                <div className="space-y-2">
+                  {records.map(r => (
+                    <div key={r.id} className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl">
+                      <span className="font-black text-xs text-slate-400">{new Date(r.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold uppercase truncate">{students.find(x => x.id === r.studentId)?.name || 'Alumno'}</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">De: {r.teacherName.split(',')[0]}</p>
                       </div>
-                    );
-                  })}
-                  {records.length === 0 && <div className="text-center py-20 text-slate-300 font-bold uppercase text-[10px] tracking-widest">Sin registros hoy</div>}
+                      <button onClick={() => deleteRecord(r.id)} className="text-slate-300">✕</button>
+                    </div>
+                  ))}
                 </div>
               )}
             </main>
           </div>
         );
       }
-
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      root.render(<App />);
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     }
 
-    // Esperar a que Firebase y los scripts externos estén listos
-    if (window.FirebaseAPI) {
-      initReactApp();
-    } else {
-      window.addEventListener('firebaseReady', initReactApp);
-    }
+    if (window.FirebaseAPI) initReactApp();
+    else window.addEventListener('firebaseReady', initReactApp);
   </script>
 </body>
 </html>
