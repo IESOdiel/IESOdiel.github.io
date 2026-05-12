@@ -10,46 +10,62 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Carga del Motor PDF.js para leer los PDFs directamente en el navegador -->
+  <!-- Motor PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-  </script>
 
   <style>
     body { -webkit-tap-highlight-color: transparent; }
     select { -webkit-appearance: none; appearance: none; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    /* Animación de carga */
+    .loader { border-top-color: #2563eb; animation: spinner 0.6s linear infinite; }
+    @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-100">
-  <div id="root"></div>
+  <div id="root">
+    <!-- Pantalla de carga inicial antes de React -->
+    <div class="h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div class="loader w-12 h-12 border-4 border-slate-200 rounded-full mb-4"></div>
+      <p class="text-slate-400 font-black text-xs uppercase tracking-widest">Iniciando Sistema...</p>
+    </div>
+  </div>
 
-  <!-- CONFIGURACIÓN FIREBASE Y LÓGICA DE DATOS -->
+  <!-- CONFIGURACIÓN FIREBASE -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    const firebaseConfig = JSON.parse(__firebase_config);
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    try {
+      const firebaseConfig = JSON.parse(__firebase_config);
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-    window.FirebaseAPI = {
-      auth, db, appId,
-      signInWithCustomToken, signInAnonymously, onAuthStateChanged,
-      doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit
-    };
+      window.FirebaseAPI = {
+        auth, db, appId,
+        signInWithCustomToken, signInAnonymously, onAuthStateChanged,
+        doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit
+      };
 
-    window.dispatchEvent(new CustomEvent('firebaseReady'));
+      // Configurar worker de PDF.js
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+      }
+
+      window.dispatchEvent(new CustomEvent('firebaseReady'));
+    } catch (err) {
+      console.error("Error crítico de configuración:", err);
+      document.getElementById('root').innerHTML = `<div class="p-10 text-center font-bold text-red-500">Error de configuración. Revisa las claves de Firebase.</div>`;
+    }
   </script>
 
   <!-- APLICACIÓN REACT -->
   <script type="text/babel">
-    const { useState, useEffect, useMemo, useRef } = React;
+    const { useState, useEffect, useMemo } = React;
 
     function initReactApp() {
       const { auth, db, appId, signInWithCustomToken, signInAnonymously, onAuthStateChanged, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc } = window.FirebaseAPI;
@@ -74,13 +90,17 @@
         const [adminPass, setAdminPass] = useState('');
         const [isAdminAuth, setIsAdminAuth] = useState(false);
 
-        // Gestión de Autenticación
+        // 1. Gestión de Autenticación
         useEffect(() => {
           const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-              await signInAnonymously(auth);
+            try {
+              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+              } else {
+                await signInAnonymously(auth);
+              }
+            } catch (e) {
+              console.error("Auth error:", e);
             }
           };
           initAuth();
@@ -91,17 +111,17 @@
           return () => unsubscribe();
         }, []);
 
-        // Suscripción a datos públicos
+        // 2. Suscripción a datos de Firebase
         useEffect(() => {
           if (!user) return;
           
           const unsubStudents = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), (s) => {
             if (s.exists()) setStudents(s.data().list || []);
-          });
+          }, (err) => console.error("Error students:", err));
 
           const unsubTeachers = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), (s) => {
             if (s.exists()) setTeachersDB(s.data().list || {});
-          });
+          }, (err) => console.error("Error teachers:", err));
 
           const today = new Date().toISOString().split('T')[0];
           const unsubRecords = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `records_${today}`), (snap) => {
@@ -110,26 +130,23 @@
             setRecords(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
           }, (err) => console.error("Error records:", err));
 
-          return () => { unsubStudents(); unsubTeachers(); unsubRecords(); };
-        }, [user]);
-
-        // Cargar perfil de profesor guardado localmente
-        useEffect(() => {
-          if (!user) return;
           const loadProfile = async () => {
             const snap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'));
             if (snap.exists()) setTeacherProfile(snap.data());
           };
           loadProfile();
+
+          return () => { unsubStudents(); unsubTeachers(); unsubRecords(); };
         }, [user]);
 
+        // 3. Lógica de filtrado
         const units = useMemo(() => {
           const u = [...new Set(students.map(s => s.unit))];
           return u.filter(Boolean).sort();
         }, [students]);
 
         const filteredStudents = useMemo(() => {
-          if (!searchTerm && !selectedUnit) return []; // Solo mostramos si hay búsqueda o unidad
+          if (!searchTerm && !selectedUnit) return [];
           return students.filter(s => {
             const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
             const matchUnit = selectedUnit ? s.unit === selectedUnit : true;
@@ -137,6 +154,7 @@
           }).slice(0, 100);
         }, [students, searchTerm, selectedUnit]);
 
+        // 4. Acciones
         const showToast = (text, type = "success") => {
           setToast({ text, type });
           setTimeout(() => setToast(null), 3000);
@@ -146,8 +164,8 @@
           e.preventDefault();
           const uId = loginUser.trim().toLowerCase();
           const pDni = loginPass.trim().toUpperCase();
-          
           const teacher = teachersDB[uId];
+          
           if (teacher && teacher.dni.toUpperCase() === pDni) {
             const profile = { ideaUser: uId, name: teacher.nombre };
             setTeacherProfile(profile);
@@ -161,7 +179,6 @@
           if (!teacherProfile) return;
           const now = new Date();
           const today = now.toISOString().split('T')[0];
-          
           try {
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `records_${today}`), {
               studentId,
@@ -171,7 +188,7 @@
             });
             showToast("Salida registrada");
           } catch (e) {
-            console.error(e);
+            showToast("Error de conexión", "error");
           }
         };
 
@@ -196,7 +213,6 @@
               const textContent = await page.getTextContent();
               fullText += textContent.items.map(item => item.str).join(' ') + "\n";
             }
-
             const lines = fullText.split('\n').filter(l => l.trim().length > 5);
             
             if (type === 'students') {
@@ -240,36 +256,27 @@
           return name.split(',')[0].split(' ').slice(0,2).join(' ');
         };
 
+        // RENDERIZADO
         if (isLoading) return (
-          <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400 font-bold">
-            Cargando...
+          <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+            <div className="loader w-10 h-10 border-4 border-slate-200 rounded-full mb-4"></div>
+            <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Sincronizando...</p>
           </div>
         );
 
         if (!teacherProfile && !isAdminMode) {
           return (
-            <div className="h-screen flex flex-col items-center justify-center p-6 bg-slate-50">
-              <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden">
+            <div className="h-screen flex flex-col items-center justify-center p-6 bg-slate-100">
+              <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
-                <h1 className="text-3xl font-black text-center mb-1 text-slate-800 uppercase tracking-tighter">IES ODIEL</h1>
+                <h1 className="text-3xl font-black text-center mb-1 text-slate-800 tracking-tighter uppercase">IES ODIEL</h1>
                 <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mb-10">Control de Pasillo</p>
-                
                 <div className="space-y-4 mb-10">
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4 mb-1 block">Usuario IdEA</label>
-                    <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="ej: jgarper123" className="w-full bg-slate-50 px-6 py-4 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4 mb-1 block">DNI con letra</label>
-                    <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="********" className="w-full bg-slate-50 px-6 py-4 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600" />
-                  </div>
+                  <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="Usuario IdEA" className="w-full bg-slate-50 px-6 py-4 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600" />
+                  <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="DNI con letra" className="w-full bg-slate-50 px-6 py-4 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600" />
                 </div>
-
-                <button type="submit" className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-black active:scale-95 transition-all text-sm uppercase tracking-widest">Acceder al Control</button>
-                
-                <button type="button" onClick={() => setIsAdminMode(true)} className="w-full mt-8 text-blue-600 font-black text-[10px] uppercase tracking-[0.2em] text-center py-2">
-                  Administrador
-                </button>
+                <button type="submit" className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-black active:scale-95 transition-all uppercase tracking-widest text-sm">Entrar</button>
+                <button type="button" onClick={() => setIsAdminMode(true)} className="w-full mt-6 text-blue-600 font-black text-[10px] uppercase tracking-widest text-center">Administrador</button>
               </form>
             </div>
           );
@@ -279,35 +286,26 @@
           return (
             <div className="h-screen bg-slate-900 text-white p-8 flex flex-col items-center justify-center">
               <div className="w-full max-w-md">
-                <div className="flex justify-between items-center mb-10">
-                  <h2 className="text-2xl font-black uppercase tracking-tight">Gestión del Centro</h2>
-                  <button onClick={() => {setIsAdminMode(false); setIsAdminAuth(false);}} className="p-3 bg-slate-800 rounded-2xl text-slate-400">Cerrar</button>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-black uppercase tracking-tight">Gestión Centro</h2>
+                  <button onClick={() => {setIsAdminMode(false); setIsAdminAuth(false);}} className="p-3 bg-slate-800 rounded-2xl text-slate-400">Volver</button>
                 </div>
-
                 {!isAdminAuth ? (
-                  <div className="space-y-6 text-center">
-                    <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
-                      <p className="text-[10px] font-black text-slate-500 uppercase mb-6 tracking-widest">Acceso Restringido</p>
-                      <input type="password" value={adminPass} onChange={e => setAdminPass(e.target.value)} placeholder="Contraseña Admin" className="w-full bg-slate-900 p-5 rounded-2xl border border-slate-700 font-bold mb-4 outline-none focus:border-blue-500 transition-all text-center" />
-                      <button onClick={() => adminPass === 'odilea21' ? setIsAdminAuth(true) : showToast("Incorrecta", "error")} className="w-full bg-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-500 transition-colors">Entrar al Panel</button>
-                    </div>
+                  <div className="bg-slate-800 p-8 rounded-[2.5rem]">
+                    <input type="password" value={adminPass} onChange={e => setAdminPass(e.target.value)} placeholder="Clave Admin" className="w-full bg-slate-900 p-5 rounded-2xl border border-slate-700 font-bold mb-4 text-center outline-none" />
+                    <button onClick={() => adminPass === 'odilea21' ? setIsAdminAuth(true) : showToast("Clave incorrecta", "error")} className="w-full bg-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest">Acceder</button>
                   </div>
                 ) : (
-                  <div className="space-y-6">
-                    <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700">
-                      <p className="text-xs font-black text-slate-400 uppercase mb-6 tracking-widest">Importación de Datos (Séneca PDF)</p>
-                      <div className="grid gap-4">
-                        <label className="flex flex-col gap-2 bg-slate-700/30 p-6 rounded-3xl border border-slate-700 cursor-pointer hover:bg-slate-700/50">
-                          <span className="text-xs font-black uppercase">📄 Listado de Alumnos</span>
-                          <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'students')} />
-                        </label>
-                        <label className="flex flex-col gap-2 bg-slate-700/30 p-6 rounded-3xl border border-slate-700 cursor-pointer hover:bg-slate-700/50">
-                          <span className="text-xs font-black uppercase">👨‍🏫 Listado Profesorado</span>
-                          <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'teachers')} />
-                        </label>
-                      </div>
-                    </div>
-                    {isProcessing && <div className="text-center font-black animate-pulse text-blue-400">Procesando...</div>}
+                  <div className="space-y-4">
+                    <label className="flex flex-col gap-2 bg-slate-800 p-6 rounded-3xl border border-slate-700 cursor-pointer">
+                      <span className="text-xs font-black uppercase text-blue-400">Subir Alumnos (PDF)</span>
+                      <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'students')} />
+                    </label>
+                    <label className="flex flex-col gap-2 bg-slate-800 p-6 rounded-3xl border border-slate-700 cursor-pointer">
+                      <span className="text-xs font-black uppercase text-green-400">Subir Profesores (PDF)</span>
+                      <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'teachers')} />
+                    </label>
+                    {isProcessing && <div className="text-center font-black animate-pulse text-blue-400 mt-4">Procesando archivo...</div>}
                   </div>
                 )}
               </div>
@@ -318,67 +316,41 @@
         return (
           <div className="h-screen flex flex-col max-w-md mx-auto bg-slate-50 relative shadow-2xl overflow-hidden">
             {statusMsg && (
-              <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[100]">
-                <div className={`px-8 py-4 rounded-full shadow-2xl font-black text-xs uppercase tracking-widest ${statusMsg.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-900 text-white'}`}>
+              <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[250px]">
+                <div className={`px-6 py-4 rounded-full shadow-2xl font-black text-[10px] text-center uppercase tracking-widest ${statusMsg.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-900 text-white'}`}>
                   {statusMsg.text}
                 </div>
               </div>
             )}
 
-            <header className="bg-white px-8 pt-8 pb-6 border-b border-slate-100 flex justify-between items-end shadow-sm shrink-0">
+            <header className="bg-white px-8 pt-10 pb-6 border-b border-slate-100 flex justify-between items-end shrink-0">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 leading-none tracking-tighter">IES ODIEL</h2>
                 <p className="text-[10px] text-blue-600 font-black uppercase tracking-[0.2em] mt-2">{formatDisplayName(teacherProfile.name)}</p>
               </div>
-              <button onClick={() => { setTeacherProfile(null); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active')); }} className="p-4 bg-slate-50 rounded-2xl text-slate-400">Cerrar</button>
+              <button onClick={() => { setTeacherProfile(null); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active')); }} className="p-3 bg-slate-50 rounded-2xl text-slate-400">Salir</button>
             </header>
 
             <nav className="flex px-6 py-4 gap-3 bg-white border-b border-slate-100 shrink-0">
-              <button onClick={() => setActiveTab('list')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'list' ? 'bg-slate-900 text-white shadow-xl' : 'bg-slate-50 text-slate-400'}`}>Alumnado</button>
-              <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'history' ? 'bg-slate-900 text-white shadow-xl' : 'bg-slate-50 text-slate-400'}`}>Historial</button>
+              <button onClick={() => setActiveTab('list')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'list' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>Alumnado</button>
+              <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'history' ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>Historial</button>
             </nav>
 
             <main className="flex-1 overflow-y-auto px-6 py-6 pb-24 no-scrollbar">
               {activeTab === 'list' ? (
                 <div className="space-y-6">
-                  {/* Buscador y Selector de Curso */}
-                  <div className="space-y-3 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2">Selección de Alumnado</p>
-                    
-                    {/* Selector de Curso y Grupo */}
-                    <div className="relative group">
-                      <select 
-                        value={selectedUnit} 
-                        onChange={e => setSelectedUnit(e.target.value)}
-                        className="w-full bg-slate-50 px-6 py-5 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600 appearance-none transition-all cursor-pointer text-slate-700"
-                      >
-                        <option value="">Selecciona Curso/Grupo...</option>
-                        {units.map(u => (
-                          <option key={u} value={u}>{u}</option>
-                        ))}
-                      </select>
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                      </div>
-                    </div>
-
+                  <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Filtro de búsqueda</p>
                     <div className="relative">
-                       <input 
-                         type="text" 
-                         value={searchTerm} 
-                         onChange={e => setSearchTerm(e.target.value)} 
-                         placeholder="O busca por nombre..." 
-                         className="w-full bg-slate-50 px-6 py-5 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600 transition-all text-slate-700" 
-                       />
-                       {searchTerm && (
-                         <button onClick={() => setSearchTerm('')} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                         </button>
-                       )}
+                      <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} className="w-full bg-slate-50 px-6 py-5 rounded-2xl outline-none font-bold text-sm border border-slate-100 text-slate-700 appearance-none">
+                        <option value="">Selecciona Curso/Grupo...</option>
+                        {units.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">▼</div>
                     </div>
+                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Escribe nombre..." className="w-full bg-slate-50 px-6 py-5 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600 transition-all text-slate-700" />
                   </div>
 
-                  {/* Listado de Alumnos */}
                   <div className="grid gap-3">
                     {filteredStudents.length > 0 ? (
                       filteredStudents.map(student => {
@@ -393,8 +365,8 @@
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              <button onClick={() => registerExit(student.id, 'baño')} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center border border-blue-100 font-bold active:scale-90 transition-transform">🚻</button>
-                              <button onClick={() => registerExit(student.id, 'otros')} className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center border border-slate-200 font-bold active:scale-90 transition-transform">📌</button>
+                              <button onClick={() => registerExit(student.id, 'baño')} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center border border-blue-100 font-bold active:scale-90 transition-transform text-lg">🚻</button>
+                              <button onClick={() => registerExit(student.id, 'otros')} className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center border border-slate-200 font-bold active:scale-90 transition-transform text-lg">📌</button>
                             </div>
                           </div>
                         );
@@ -402,7 +374,7 @@
                     ) : (
                       <div className="py-20 text-center space-y-4">
                          <div className="text-4xl">🔍</div>
-                         <p className="text-xs font-black text-slate-300 uppercase tracking-[0.2em]">Selecciona un grupo para empezar</p>
+                         <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Elige curso para empezar</p>
                       </div>
                     )}
                   </div>
@@ -411,39 +383,27 @@
                 <div className="space-y-4">
                   {records.map(record => {
                     const s = students.find(x => x.id === record.studentId);
-                    const studentName = s ? s.name : "Alumno Externo";
+                    const studentName = s ? s.name : "Alumno";
                     const time = new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    const date = new Date(record.timestamp).toLocaleDateString([], { day: '2-digit', month: '2-digit' });
-                    const reasonIcon = record.reason === 'baño' ? '🚻' : '📌';
-                    const reason = record.reason === 'baño' ? 'Baño' : 'Otros';
-                    
                     const canDelete = record.teacherName === teacherProfile.name;
-                    
                     return (
-                      <div key={record.id} className="bg-white p-5 rounded-3xl border border-slate-100 flex items-center shadow-sm relative overflow-hidden group">
-                        <div className="absolute left-0 top-0 h-full w-1.5 bg-slate-900 group-hover:bg-blue-600 transition-colors"></div>
-                        <div className="flex flex-col pr-4 shrink-0 border-r border-slate-50 text-center min-w-[60px]">
+                      <div key={record.id} className="bg-white p-5 rounded-3xl border border-slate-100 flex items-center shadow-sm relative overflow-hidden">
+                        <div className="absolute left-0 top-0 h-full w-1 bg-slate-900"></div>
+                        <div className="flex flex-col pr-4 border-r border-slate-50 min-w-[60px] text-center">
                           <span className="font-black text-slate-800 text-sm">{time}</span>
-                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{date}</span>
+                          <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Hora</span>
                         </div>
                         <div className="flex-1 min-w-0 pl-4 pr-2">
                           <p className="text-xs font-black text-slate-800 uppercase truncate mb-1">{studentName}</p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-medium text-slate-600">{reasonIcon} {reason}</span>
-                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">👤 {formatDisplayName(record.teacherName)}</span>
-                          </div>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest truncate">Prof: {formatDisplayName(record.teacherName)}</p>
                         </div>
                         {canDelete && (
-                          <button 
-                            onClick={() => deleteRecord(record.id)}
-                            className="p-3 text-red-300 hover:text-red-600 transition-colors shrink-0"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                          </button>
+                          <button onClick={() => deleteRecord(record.id)} className="p-2 text-red-300">🗑️</button>
                         )}
                       </div>
                     );
                   })}
+                  {records.length === 0 && <div className="text-center py-20 text-slate-300 font-bold uppercase text-[10px] tracking-widest">Sin registros hoy</div>}
                 </div>
               )}
             </main>
@@ -455,6 +415,7 @@
       root.render(<App />);
     }
 
+    // Esperar a que Firebase y los scripts externos estén listos
     if (window.FirebaseAPI) {
       initReactApp();
     } else {
