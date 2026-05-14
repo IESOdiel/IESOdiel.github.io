@@ -1082,9 +1082,16 @@
                                   {formatDisplayName(record.teacherName)}
                                 </span>
                               </div>
-                              <button onClick={() => setRecordToDelete({ id: record.id, datePartition: historyDate, isLogout: false })} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="Anular permiso">
-                                <Trash2 size={16} />
-                              </button>
+                              {/* MEJORA: Solo aparece el botón si el profesor del registro es el profesor actual */}
+                              {teacherProfile && record.teacherName === teacherProfile.name && (
+                                <button 
+                                  onClick={() => setRecordToDelete({ id: record.id, datePartition: historyDate, isLogout: false })} 
+                                  className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" 
+                                  title="Anular permiso"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
