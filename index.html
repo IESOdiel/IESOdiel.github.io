@@ -963,14 +963,21 @@
                                   {time} {record.isRetroactive && <span className="text-purple-500 ml-1" title="Registrado manualmente">*</span>}
                                 </span>
                                 <span className="text-[9px] text-slate-400 bg-slate-50 px-1 py-0.5 rounded border border-slate-100 truncate max-w-[80px]">
-                                  {record.teacherName.split(',')[0]}
+                                  {formatDisplayName(record.teacherName)}
                                 </span>
                               </div>
-                              <button onClick={() => setRecordToDelete({ id: record.id, datePartition: historyDate, isLogout: false })} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" title="Anular permiso">
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
+                              
+                              {/* MEJORA: Solo mostramos el botón de borrar si el profesor actual es el autor del registro */}
+                              {record.teacherName === teacherProfile.name && (
+                                <button 
+                                  onClick={() => setRecordToDelete({ id: record.id, datePartition: historyDate, isLogout: false })} 
+                                  className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors" 
+                                  title="Anular permiso"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>                          </div>
                         );
                       })}
                     </div>
