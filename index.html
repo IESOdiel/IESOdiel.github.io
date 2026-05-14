@@ -16,644 +16,704 @@
     </script>
 
     <style>
-        body { 
-            -webkit-tap-highlight-color: transparent; 
-            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
+        body { -webkit-tap-highlight-color: transparent; }
         select { -webkit-appearance: none; appearance: none; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        @keyframes slide-up {
-            from { transform: translateY(100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        .animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-200">
     <div id="root"></div>
 
-    <!-- Módulo de Configuración Firebase -->
+    <!-- Módulo de Inicialización Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCeQ6so402oADraHknUMMdB95zLtz8hNd8",
-            authDomain: "control-de-pasillos.firebaseapp.com",
-            projectId: "control-de-pasillos",
-            storageBucket: "control-de-pasillos.firebasestorage.app",
-            messagingSenderId: "869022506837",
-            appId: "1:869022506837:web:d3d91eb5cfd8b66d2019dc",
-            measurementId: "G-X15S8NJVQV"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        window.FirebaseAPI = { 
-            auth: getAuth(app), 
-            db: getFirestore(app),
-            signInAnonymously, onAuthStateChanged, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where
+        window.FirebaseAPI = {
+            initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
+            getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, orderBy
         };
         window.dispatchEvent(new Event('firebaseReady'));
     </script>
 
     <!-- Aplicación React -->
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        function initReactApp() {
+            const { useState, useMemo, useEffect, useRef } = React;
+            const {
+                initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
+                getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, orderBy
+            } = window.FirebaseAPI;
 
-        // --- COMPONENTES DE ICONOS (Size 24 para acciones por defecto) ---
-        const Search = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-        const Clock = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-        const CheckCircle = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
-        const ShieldAlert = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
-        const X = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-        const Lock = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
-        const Calendar = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
-        const Settings = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.8.96 1.41.96h.09a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-        const LogOut = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
-        const HistoryIcon = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>;
-        const CalendarClock = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.25V14"/><path d="M22 16a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z"/></svg>;
-        const Trash2 = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
-        const Info = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
-        const BarChart = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>;
-        const FileText = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
-        const Phone = ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
+            const firebaseConfig = {
+                apiKey: "AIzaSyCeQ6so402oADraHknUMMdB95zLtz8hNd8",
+                authDomain: "control-de-pasillos.firebaseapp.com",
+                projectId: "control-de-pasillos",
+                storageBucket: "control-de-pasillos.firebasestorage.app",
+                messagingSenderId: "869022506837",
+                appId: "1:869022506837:web:d3d91eb5cfd8b66d2019dc",
+                measurementId: "G-X15S8NJVQV"
+            };
 
-        // --- UTILIDADES JAVASCRIPT ---
-        const removeAccents = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const formatDisplayName = (fullName) => {
-            if (!fullName) return "";
-            if (fullName.includes(',')) {
-                const parts = fullName.split(',');
-                return `${parts[1].trim()} ${parts[0].trim()}`;
-            }
-            return fullName;
-        };
-
-        const parsePDF = async (file) => {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let rows = [];
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const content = await page.getTextContent();
-                let yRows = {};
-                content.items.forEach(item => {
-                    const str = item.str.trim();
-                    if (!str) return;
-                    const y = Math.round(item.transform[5] / 5) * 5;
-                    if (!yRows[y]) yRows[y] = [];
-                    yRows[y].push(item);
-                });
-                const sortedY = Object.keys(yRows).sort((a, b) => b - a);
-                sortedY.forEach(y => {
-                    const items = yRows[y].sort((a, b) => a.transform[4] - b.transform[4]);
-                    let rowArr = [];
-                    let currentCell = items[0].str.trim();
-                    let lastX = items[0].transform[4];
-                    let lastWidth = items[0].width;
-                    for (let j = 1; j < items.length; j++) {
-                        const item = items[j];
-                        const x = item.transform[4];
-                        if ((x - (lastX + lastWidth)) > 15) {
-                            rowArr.push(currentCell);
-                            currentCell = item.str.trim();
-                        } else {
-                            currentCell += ' ' + item.str.trim();
-                        }
-                        lastX = x; lastWidth = item.width || 0;
-                    }
-                    rowArr.push(currentCell);
-                    rows.push(rowArr.map(c => c.replace(/\s+/g, ' ')));
-                });
-            }
-            return rows;
-        };
-
-        function parseCSVText(text, delimiter = ',') {
-            let result = [], row = [], inQuotes = false, value = '';
-            text = text.replace(/^\uFEFF/, '');
-            for (let i = 0; i < text.length; i++) {
-                let char = text[i], nextChar = text[i+1];
-                if (char === '"') {
-                    if (inQuotes && nextChar === '"') { value += '"'; i++; }
-                    else { inQuotes = !inQuotes; }
-                } else if (char === delimiter && !inQuotes) {
-                    row.push(value.trim()); value = '';
-                } else if ((char === '\n' || char === '\r') && !inQuotes) {
-                    if (char === '\r' && nextChar === '\n') i++;
-                    row.push(value.trim());
-                    if (row.some(c => c !== '')) result.push(row);
-                    row = []; value = '';
-                } else { value += char; }
-            }
-            if (value || row.length > 0) {
-                row.push(value.trim());
-                if (row.some(c => c !== '')) result.push(row);
-            }
-            return result;
-        }
-
-        const parseUnitInfo = (u) => {
-            if (!u) return { full: '', level: '', group: '' };
-            const cleanU = u.trim();
-            // Regex mejorado para soportar "1º ESO A", "2º FPI GA", "1° G. ADM"
-            const match = cleanU.match(/^(\d+[º°]?\s*[^A-Z\s]+(?:\s+[^A-Z\s]+)*)\s+([A-Z0-9]+)$/);
-            if (match) return { full: cleanU, level: match[1].trim(), group: match[2] };
-            return { full: cleanU, level: cleanU, group: '' };
-        };
-
-        const normalizeTeacherName = (name) => {
-            if (!name) return "";
-            let clean = name.split('-')[0].split('(')[0];
-            return removeAccents(clean).replace(/[^a-zA-Z]/g, '').toUpperCase();
-        };
-
-        const standardizeUnitCode = (text) => {
-            if (!text) return "";
-            let s = removeAccents(text.toUpperCase()).replace(/[^A-Z0-9]/g, '');
-            s = s.replace(/BACHILLERATO|BACH|BCHTO|BTO|BHCS|BCT|BCG|BCA|BAM/g, 'BAC')
-                 .replace(/EDUCACIONSECUNDARIAOBLIGATORIA/g, 'ESO')
-                 .replace(/PRIMERO/g, '1').replace(/SEGUNDO/g, '2')
-                 .replace(/TERCERO/g, '3').replace(/CUARTO/g, '4');
-            return s;
-        };
-
-        const TIME_SLOTS = [
-            { id: 1, start: '08:30', end: '09:30' },
-            { id: 2, start: '09:30', end: '10:30' },
-            { id: 3, start: '10:30', end: '11:30' },
-            { id: 4, start: '12:00', end: '13:00' },
-            { id: 5, start: '13:00', end: '14:00' },
-            { id: 6, start: '14:00', end: '15:00' }
-        ];
-
-        // --- COMPONENTE APP ---
-        function App() {
-            const { auth, db } = window.FirebaseAPI;
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
             const appId = "ies-odiel-app";
 
-            // Estados Globales
-            const [user, setUser] = useState(null);
-            const [teacherProfile, setTeacherProfile] = useState(null);
-            const [students, setStudents] = useState([]);
-            const [teachersDB, setTeachersDB] = useState({});
-            const [globalSchedules, setGlobalSchedules] = useState({});
-            
-            // Navegación
-            const [activeTab, setActiveTab] = useState('list');
-            const [searchTerm, setSearchTerm] = useState('');
-            const [selectedUnit, setSelectedUnit] = useState('');
-            const [selectedLevel, setSelectedLevel] = useState('');
-            const [selectedGroup, setSelectedGroup] = useState('');
-            
-            // Registros
-            const [todayRecords, setTodayRecords] = useState([]);
-            const [historyRecords, setHistoryRecords] = useState([]);
-            const [historyDate, setHistoryDate] = useState(new Date().toISOString().split('T')[0]);
-            
-            // Modales / Alertas
-            const [callModal, setCallModal] = useState(null);
-            const [recordToDelete, setRecordToDelete] = useState(null);
-            const [toastMsg, setToastMsg] = useState('');
-            
-            // Admin y Retroactivo
-            const [isAdminMode, setIsAdminMode] = useState(false);
-            const [isRetroMode, setIsRetroMode] = useState(false);
-            const [retroDateTime, setRetroDateTime] = useState('');
-            const [uploading, setUploading] = useState(false);
+            // --- COMPONENTES ICONOS SVG ---
+            const Search = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+            const Clock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+            const CheckCircle = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+            const ShieldAlert = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+            const X = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+            const Lock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+            const Calendar = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+            const Settings = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.8.96 1.41.96h.09a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
+            const LogOut = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+            const HistoryIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>;
+            const CalendarClock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.25V14"/><path d="M22 16a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z"/></svg>;
+            const Trash2 = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
+            const Info = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
+            const BarChart = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>;
+            const FileText = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+            const Phone = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
+            const Bath = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6a2 2 0 1 1 4 0 2 2 0 0 1-4 0ZM7 12V9a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v3M5 20h14a2 2 0 0 0 2-2v-5H3v5a2 2 0 0 0 2 2Z"/></svg>;
+            const Medkit = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M8 2h8v4H8zM12 10v6M9 13h6"/></svg>;
+            const HelpCircle = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>;
 
-            // Informes
-            const [reportUnit, setReportUnit] = useState('');
-            const [reportStudentId, setReportStudentId] = useState('');
-            const [reportRecords, setReportRecords] = useState(null);
-            const [isLoadingReport, setIsLoadingReport] = useState(false);
-
-            useEffect(() => {
-                const initAuth = async () => { 
-                    try { await window.FirebaseAPI.signInAnonymously(auth); } catch(e){} 
-                };
-                initAuth();
-                const unsub = window.FirebaseAPI.onAuthStateChanged(auth, (u) => setUser(u));
-                return unsub;
-            }, []);
-
-            useEffect(() => {
-                if (!user) return;
-                const unsubs = [
-                    window.FirebaseAPI.onSnapshot(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), (s) => setStudents(s.exists() ? s.data().list : [])),
-                    window.FirebaseAPI.onSnapshot(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), (s) => setTeachersDB(s.exists() ? s.data().list : {})),
-                    window.FirebaseAPI.onSnapshot(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'schedules'), (s) => setGlobalSchedules(s.exists() ? s.data().list : {})),
-                    window.FirebaseAPI.onSnapshot(window.FirebaseAPI.doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), (s) => setTeacherProfile(s.exists() ? s.data() : null))
-                ];
-                const todayStr = new Date().toISOString().split('T')[0];
-                unsubs.push(window.FirebaseAPI.onSnapshot(window.FirebaseAPI.collection(db, 'artifacts', appId, 'public', 'data', `records_${todayStr}`), (snap) => {
-                    const d = []; snap.forEach(doc => d.push({id: doc.id, ...doc.data()}));
-                    setTodayRecords(d);
-                }));
-                return () => unsubs.forEach(u => u());
-            }, [user]);
-
-            useEffect(() => {
-                if (!user) return;
-                return window.FirebaseAPI.onSnapshot(window.FirebaseAPI.collection(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`), (snap) => {
-                    const d = []; snap.forEach(doc => d.push({id: doc.id, ...doc.data()}));
-                    setHistoryRecords(d.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                });
-            }, [user, historyDate]);
-
-            const units = useMemo(() => [...new Set(students.map(s => s.unit))].filter(Boolean).sort(), [students]);
-
-            const handleUnitSelect = (val) => {
-                setSelectedUnit(val);
-                const info = parseUnitInfo(val);
-                setSelectedLevel(info.level);
-                setSelectedGroup(info.group);
+            // --- FUNCIONES DE APOYO ---
+            const removeAccents = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const formatDisplayName = (fullName) => {
+                if (!fullName) return "";
+                if (fullName.includes(',')) {
+                    const parts = fullName.split(',');
+                    return `${parts[1].trim()} ${parts[0].trim()}`;
+                }
+                return fullName;
             };
 
-            // Horario Inteligente
-            useEffect(() => {
-                if (!teacherProfile || !Object.keys(globalSchedules).length || activeTab !== 'list') return;
-                const evaluateSchedule = () => {
-                    const now = isRetroMode && retroDateTime ? new Date(retroDateTime) : new Date();
-                    const day = now.getDay();
-                    if (day < 1 || day > 5) return;
-                    const curMin = now.getHours() * 60 + now.getMinutes();
-                    let slotId = null;
-                    for (const s of TIME_SLOTS) {
-                        const [sh, sm] = s.start.split(':').map(Number);
-                        const [eh, em] = s.end.split(':').map(Number);
-                        if (curMin >= sh*60+sm && curMin < eh*60+em) { slotId = s.id; break; }
-                    }
-                    if (!slotId) return;
-                    const myName = normalizeTeacherName(teacherProfile.name);
-                    const mySched = globalSchedules[myName];
-                    if (mySched) {
-                        const cell = mySched[`${day}-${slotId}`];
-                        if (cell && !cell.toUpperCase().includes("GUARDIA")) {
+            const parsePDF = async (file) => {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let rows = [];
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    let yRows = {};
+                    content.items.forEach(item => {
+                        const str = item.str.trim();
+                        if (!str) return;
+                        const y = Math.round(item.transform[5] / 5) * 5;
+                        if (!yRows[y]) yRows[y] = [];
+                        yRows[y].push(item);
+                    });
+                    const sortedY = Object.keys(yRows).sort((a, b) => b - a);
+                    sortedY.forEach(y => {
+                        const items = yRows[y].sort((a, b) => a.transform[4] - b.transform[4]);
+                        let rowArr = [];
+                        let currentCell = items[0].str.trim();
+                        let lastX = items[0].transform[4];
+                        let lastWidth = items[0].width;
+                        for (let j = 1; j < items.length; j++) {
+                            const item = items[j];
+                            const x = item.transform[4];
+                            if ((x - (lastX + lastWidth)) > 15) {
+                                rowArr.push(currentCell);
+                                currentCell = item.str.trim();
+                            } else { currentCell += ' ' + item.str.trim(); }
+                            lastX = x;
+                            lastWidth = item.width || 0;
+                        }
+                        rowArr.push(currentCell);
+                        rows.push(rowArr.map(c => c.replace(/\s+/g, ' ')));
+                    });
+                }
+                return rows;
+            };
+
+            function parseCSVText(text, delimiter = ',') {
+                let result = [], row = [], inQuotes = false, value = '';
+                text = text.replace(/^\uFEFF/, '');
+                for (let i = 0; i < text.length; i++) {
+                    let char = text[i], nextChar = text[i+1];
+                    if (char === '"') {
+                        if (inQuotes && nextChar === '"') { value += '"'; i++; }
+                        else { inQuotes = !inQuotes; }
+                    } else if (char === delimiter && !inQuotes) {
+                        row.push(value.trim()); value = '';
+                    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                        if (char === '\r' && nextChar === '\n') i++;
+                        row.push(value.trim());
+                        if (row.some(c => c !== '')) result.push(row);
+                        row = []; value = '';
+                    } else { value += char; }
+                }
+                if (value || row.length > 0) {
+                    row.push(value.trim());
+                    if (row.some(c => c !== '')) result.push(row);
+                }
+                return result;
+            }
+
+            const normalizeTeacherName = (name) => {
+                if (!name) return "";
+                let clean = name.split('-')[0].split('(')[0];
+                return removeAccents(clean).replace(/[^a-zA-Z]/g, '').toUpperCase();
+            };
+
+            const parseUnitInfo = (u) => {
+                if (!u) return { full: '', level: '', group: '' };
+                const cleanU = u.trim();
+                const match = cleanU.match(/^(.*?)[-\s]+([a-zA-Z0-9])$/);
+                if (match) return { full: cleanU, level: match[1].trim(), group: match[2].toUpperCase() };
+                return { full: cleanU, level: cleanU, group: '' };
+            };
+
+            const standardizeUnitCode = (text) => {
+                if (!text) return "";
+                let s = removeAccents(text.toUpperCase()).replace(/[^A-Z0-9]/g, '');
+                s = s.replace(/BACHILLERATO|BACH|BCHTO|BTO|BHCS|BCT|BCG|BCA|BAM/g, 'BAC');
+                s = s.replace(/EDUCACIONSECUNDARIAOBLIGATORIA/g, 'ESO');
+                s = s.replace(/PRIMERO/g, '1').replace(/SEGUNDO/g, '2').replace(/TERCERO/g, '3').replace(/CUARTO/g, '4');
+                return s;
+            };
+
+            const TIME_SLOTS = [
+                { id: 1, start: '08:30', end: '09:30' },
+                { id: 2, start: '09:30', end: '10:30' },
+                { id: 3, start: '10:30', end: '11:30' },
+                { id: 4, start: '12:00', end: '13:00' },
+                { id: 5, start: '13:00', end: '14:00' },
+                { id: 6, start: '14:00', end: '15:00' }
+            ];
+
+            // --- COMPONENTE APP ---
+            function App() {
+                const [user, setUser] = useState(null);
+                const [isInitializing, setIsInitializing] = useState(true);
+                const [students, setStudents] = useState([]);
+                const [teachersDB, setTeachersDB] = useState({});
+                const [globalSchedules, setGlobalSchedules] = useState({});
+                const [teacherProfile, setTeacherProfile] = useState(null);
+                const [activeTab, setActiveTab] = useState('list');
+                const [searchTerm, setSearchTerm] = useState('');
+                const [selectedUnit, setSelectedUnit] = useState('');
+                const [isRetroMode, setIsRetroMode] = useState(false);
+                const [retroDateTime, setRetroDateTime] = useState('');
+                const [historyDate, setHistoryDate] = useState(new Date().toISOString().split('T')[0]);
+                const [historyRecords, setHistoryRecords] = useState([]);
+                const [todayRecords, setTodayRecords] = useState([]);
+                const [toastMsg, setToastMsg] = useState('');
+                const [recordToDelete, setRecordToDelete] = useState(null);
+                const [callModal, setCallModal] = useState(null);
+
+                const [reportUnit, setReportUnit] = useState('');
+                const [reportStudentId, setReportStudentId] = useState('');
+                const [reportStartDate, setReportStartDate] = useState(() => {
+                    const now = new Date();
+                    const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+                    return `${year}-09-01`;
+                });
+                const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
+                const [reportRecords, setReportRecords] = useState(null);
+                const [isLoadingReport, setIsLoadingReport] = useState(false);
+
+                const [isAdminMode, setIsAdminMode] = useState(false);
+                const [ideaInput, setIdeaInput] = useState('');
+                const [dniPassInput, setDniPassInput] = useState('');
+                const [loginError, setLoginError] = useState('');
+                const [uploading, setUploading] = useState(false);
+
+                const lastCalculatedSlot = useRef('');
+
+                useEffect(() => {
+                    signInAnonymously(auth).catch(console.error);
+                    const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); setIsInitializing(false); });
+                    return () => unsubscribe();
+                }, []);
+
+                useEffect(() => {
+                    if (!user) return;
+                    const unsubs = [
+                        onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), (s) => { if (s.exists()) setStudents(s.data().list || []); }),
+                        onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), (s) => { if (s.exists()) setTeachersDB(s.data().list || {}); }),
+                        onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'schedules'), (s) => { if (s.exists()) setGlobalSchedules(s.data().list || {}); }),
+                        onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), (s) => { if (s.exists() && s.data().name) setTeacherProfile(s.data()); })
+                    ];
+                    return () => unsubs.forEach(u => u());
+                }, [user]);
+
+                useEffect(() => {
+                    if (!user) return;
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    return onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `records_${todayStr}`), (snap) => {
+                        const data = []; snap.forEach(d => data.push({ id: d.id, ...d.data() }));
+                        setTodayRecords(data);
+                    });
+                }, [user]);
+
+                useEffect(() => {
+                    if (!user) return;
+                    return onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`), (snap) => {
+                        const data = []; snap.forEach(d => data.push({ id: d.id, ...d.data() }));
+                        data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                        setHistoryRecords(data);
+                    });
+                }, [user, historyDate]);
+
+                useEffect(() => {
+                    if (!teacherProfile || !globalSchedules || students.length === 0 || activeTab !== 'list') return;
+                    const unitsList = Array.from(new Set(students.map(s => s.unit))).filter(Boolean).sort();
+
+                    const evaluate = (targetDate) => {
+                        const day = targetDate.getDay();
+                        if (day < 1 || day > 5) return '';
+                        const ct = targetDate.getHours() * 60 + targetDate.getMinutes();
+                        let slotId = null;
+                        for (const s of TIME_SLOTS) {
+                            const [sh, sm] = s.start.split(':').map(Number);
+                            const [eh, em] = s.end.split(':').map(Number);
+                            if (ct >= sh*60+sm && ct < eh*60+em) { slotId = s.id; break; }
+                        }
+                        if (!slotId) return '';
+                        const sk = `${day}-${slotId}`;
+                        const mySched = globalSchedules[normalizeTeacherName(teacherProfile.name)];
+                        if (mySched && mySched[sk]) {
+                            const cell = mySched[sk].toUpperCase();
+                            if (cell.includes("GUARDIA")) return '';
                             const normCell = standardizeUnitCode(cell);
-                            const matched = units.find(u => normCell.includes(standardizeUnitCode(u)));
-                            if (matched) handleUnitSelect(matched);
+                            return unitsList.find(u => normCell.includes(standardizeUnitCode(u))) || '';
                         }
+                        return '';
+                    };
+
+                    if (isRetroMode && retroDateTime) {
+                        setSelectedUnit(evaluate(new Date(retroDateTime)));
+                    } else if (!isRetroMode) {
+                        const unit = evaluate(new Date());
+                        if (unit) setSelectedUnit(unit);
                     }
+                }, [teacherProfile, globalSchedules, students, activeTab, isRetroMode, retroDateTime]);
+
+                const registerBreak = async (studentId, reason, callTarget = null, notes = null) => {
+                    if (!user || !teacherProfile) return;
+                    const timestamp = (isRetroMode && retroDateTime) ? new Date(retroDateTime).toISOString() : new Date().toISOString();
+                    const datePartition = timestamp.split('T')[0];
+                    try {
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `records_${datePartition}`), {
+                            studentId,
+                            teacherName: teacherProfile.name,
+                            timestamp,
+                            isRetroactive: isRetroMode,
+                            reason,
+                            callTarget,
+                            notes
+                        });
+                        setToastMsg(`✅ ${reason} registrado.`);
+                        if (isRetroMode) { setIsRetroMode(false); setRetroDateTime(''); }
+                    } catch (e) { setToastMsg("❌ Error al guardar."); }
                 };
-                evaluateSchedule();
-            }, [teacherProfile, globalSchedules, activeTab, isRetroMode, retroDateTime]);
 
-            const filteredStudents = useMemo(() => {
-                const term = removeAccents(searchTerm.toLowerCase()).trim();
-                return students.filter(s => {
-                    const matchUnit = selectedLevel ? (s.unit.includes(selectedLevel) && (selectedGroup ? s.unit.includes(selectedGroup) : true)) : true;
-                    const matchSearch = term ? removeAccents(s.name.toLowerCase()).includes(term) : true;
-                    return matchUnit && matchSearch;
-                });
-            }, [students, searchTerm, selectedLevel, selectedGroup]);
+                const units = useMemo(() => Array.from(new Set(students.map(s => s.unit))).filter(Boolean).sort(), [students]);
 
-            const todayStats = useMemo(() => {
-                return {
-                    total: todayRecords.length,
-                    bano: todayRecords.filter(r => r.reason === 'Baño').length,
-                    enf: todayRecords.filter(r => r.reason === 'Enfermedad').length,
-                    llamada: todayRecords.filter(r => r.reason === 'Llamada').length
-                };
-            }, [todayRecords]);
-
-            const registerAction = async (studentId, reason, callData = null) => {
-                const ts = isRetroMode && retroDateTime ? new Date(retroDateTime).toISOString() : new Date().toISOString();
-                const partition = ts.split('T')[0];
-                try {
-                    await window.FirebaseAPI.addDoc(window.FirebaseAPI.collection(db, 'artifacts', appId, 'public', 'data', `records_${partition}`), {
-                        studentId, reason, timestamp: ts, 
-                        teacherName: teacherProfile.name,
-                        isRetroactive: isRetroMode,
-                        ...(callData || {})
+                const filteredStudents = useMemo(() => {
+                    return students.filter(s => {
+                        const matchUnit = selectedUnit ? s.unit === selectedUnit : true;
+                        const matchSearch = searchTerm ? removeAccents(s.name.toLowerCase()).includes(removeAccents(searchTerm.toLowerCase())) : true;
+                        return matchUnit && matchSearch;
                     });
-                    setToastMsg(`✅ Registrado: ${reason}`);
-                    if (isRetroMode) setIsRetroMode(false);
-                    setCallModal(null);
-                } catch(e) { setToastMsg("❌ Error al guardar"); }
-            };
+                }, [students, selectedUnit, searchTerm]);
 
-            const handleMassDelete = async (start, end) => {
-                if (!window.confirm("¿Borrar permanentemente todos los registros en este rango?")) return;
-                setUploading(true);
-                let curr = new Date(start);
-                const endD = new Date(end);
-                while(curr <= endD) {
-                    const p = curr.toISOString().split('T')[0];
-                    const snap = await window.FirebaseAPI.getDocs(window.FirebaseAPI.collection(db, 'artifacts', appId, 'public', 'data', `records_${p}`));
-                    const deletions = [];
-                    snap.forEach(d => deletions.push(window.FirebaseAPI.deleteDoc(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', `records_${p}`, d.id))));
-                    await Promise.all(deletions);
-                    curr.setDate(curr.getDate() + 1);
-                }
-                setToastMsg("✅ Borrado masivo completado");
-                setUploading(false);
-            };
+                const todayStats = useMemo(() => {
+                    const sIds = new Set(filteredStudents.map(s => s.id));
+                    const recs = todayRecords.filter(r => sIds.has(r.studentId));
+                    return {
+                        total: recs.length,
+                        bano: recs.filter(r => r.reason === 'Baño').length,
+                        enf: recs.filter(r => r.reason === 'Enfermería').length,
+                        otros: recs.filter(r => r.reason === 'Otros').length
+                    };
+                }, [filteredStudents, todayRecords]);
 
-            const generateReport = async () => {
-                if (!reportUnit) return;
-                setIsLoadingReport(true);
-                const results = [];
-                const now = new Date();
-                const start = new Date(now.getFullYear() - (now.getMonth() < 8 ? 1 : 0), 8, 1);
-                let curr = new Date(start);
-                while(curr <= now) {
-                    const p = curr.toISOString().split('T')[0];
-                    const snap = await window.FirebaseAPI.getDocs(window.FirebaseAPI.collection(db, 'artifacts', appId, 'public', 'data', `records_${p}`));
-                    snap.forEach(d => {
-                        const data = d.data();
-                        if (students.find(s => s.id === data.studentId)?.unit === reportUnit) {
-                            if (!reportStudentId || data.studentId === reportStudentId) results.push({id: d.id, ...data});
+                const generateReport = async () => {
+                    if (!reportUnit) return;
+                    setIsLoadingReport(true);
+                    try {
+                        let all = [];
+                        let curr = new Date(reportStartDate);
+                        const end = new Date(reportEndDate);
+                        const targetIds = reportStudentId ? [reportStudentId] : students.filter(s => s.unit === reportUnit).map(s => s.id);
+                        while(curr <= end) {
+                            const dStr = curr.toISOString().split('T')[0];
+                            const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dStr}`));
+                            snap.forEach(d => {
+                                const data = d.data();
+                                if (targetIds.includes(data.studentId)) all.push({ id: d.id, ...data });
+                            });
+                            curr.setDate(curr.getDate() + 1);
                         }
-                    });
-                    curr.setDate(curr.getDate() + 1);
-                }
-                setReportRecords(results.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                setIsLoadingReport(false);
-            };
+                        all.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+                        setReportRecords(all);
+                    } catch (e) { setToastMsg("❌ Error en informe."); }
+                    finally { setIsLoadingReport(false); }
+                };
 
-            // --- VISTAS ---
-            if (!user) return <div className="h-screen flex items-center justify-center text-slate-400">Conectando...</div>;
-
-            if (isAdminMode) return (
-                <div className="max-w-md mx-auto min-h-screen bg-slate-800 text-white p-6 space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-bold flex items-center gap-2"><Settings/> Panel de Gestión</h2>
-                        <button onClick={() => setIsAdminMode(false)}><X/></button>
-                    </div>
-                    <div className="space-y-4">
-                        <div className="p-4 bg-slate-700 rounded-2xl border border-slate-600">
-                            <h3 className="text-sm font-bold mb-3">Carga de Datos</h3>
-                            <label className="block text-xs mb-1">Profesores (PDF/CSV)</label>
-                            <input type="file" onChange={async (e) => {
-                                setUploading(true);
-                                const rows = e.target.files[0].name.endsWith('.pdf') ? await parsePDF(e.target.files[0]) : parseCSVText(await e.target.files[0].text());
-                                const list = {};
-                                rows.forEach(r => { if(r[0] && r[1] && r[2]) list[r[1].toLowerCase()] = { name: r[0], dni: r[2].toUpperCase() }; });
-                                await window.FirebaseAPI.setDoc(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list });
-                                setUploading(false); setToastMsg("✅ Profesores actualizados");
-                            }} className="w-full text-xs bg-slate-900 p-2 rounded-lg mb-4"/>
-                            
-                            <label className="block text-xs mb-1">Alumnado (PDF/CSV)</label>
-                            <input type="file" onChange={async (e) => {
-                                setUploading(true);
-                                const rows = e.target.files[0].name.endsWith('.pdf') ? await parsePDF(e.target.files[0]) : parseCSVText(await e.target.files[0].text());
-                                const list = rows.map((r, i) => r[0] && r[1] ? { id: `st_${i}`, name: r[0], unit: r[1] } : null).filter(Boolean);
-                                await window.FirebaseAPI.setDoc(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list });
-                                setUploading(false); setToastMsg("✅ Alumnado actualizado");
-                            }} className="w-full text-xs bg-slate-900 p-2 rounded-lg mb-4"/>
-
-                            <label className="block text-xs mb-1">Horarios GHC (HTML)</label>
-                            <input type="file" onChange={async (e) => {
-                                setUploading(true);
-                                const text = await e.target.files[0].text();
-                                const docHTML = new DOMParser().parseFromString(text, 'text/html');
-                                const list = {};
-                                docHTML.querySelectorAll('tr').forEach(row => {
-                                    const cells = row.querySelectorAll('td, th');
-                                    if(cells.length < 5) return;
-                                    const name = normalizeTeacherName(cells[0].textContent);
-                                    if(!name) return;
-                                    list[name] = {};
-                                    for(let i=1; i<cells.length; i++) {
-                                        const day = Math.floor((i-1)/6)+1;
-                                        const slot = ((i-1)%6)+1;
-                                        list[name][`${day}-${slot}`] = cells[i].textContent.trim();
+                const handleUploadSchedules = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    setUploading(true);
+                    const isHTML = file.name.toLowerCase().endsWith('.htm') || file.name.toLowerCase().endsWith('.html');
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                        try {
+                            const text = ev.target.result;
+                            const result = {};
+                            if (isHTML) {
+                                const parser = new DOMParser();
+                                const docHTML = parser.parseFromString(text, 'text/html');
+                                const htmlRows = docHTML.querySelectorAll('tr');
+                                htmlRows.forEach((row) => {
+                                    const cells = Array.from(row.querySelectorAll('th, td'));
+                                    if (cells.length < 5) return;
+                                    const rawName = cells[0].textContent.replace(/\u00A0/g, " ").trim();
+                                    const normName = normalizeTeacherName(rawName);
+                                    if (!normName || normName.length < 5 || rawName.toLowerCase().includes('lunes')) return;
+                                    result[normName] = {};
+                                    let slotIndex = 0;
+                                    for (let i = 1; i < cells.length; i++) {
+                                        const cell = cells[i];
+                                        let colspan = parseInt(cell.getAttribute('colspan') || '1', 10);
+                                        let cellText = cell.textContent.replace(/\u00A0/g, " ").trim();
+                                        for (let c = 0; c < colspan; c++) {
+                                            if (slotIndex < 30) {
+                                                const day = Math.floor(slotIndex / 6) + 1;
+                                                const slot = (slotIndex % 6) + 1;
+                                                if (cellText) result[normName][`${day}-${slot}`] = cellText;
+                                            }
+                                            slotIndex++;
+                                        }
                                     }
                                 });
-                                await window.FirebaseAPI.setDoc(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'schedules'), { list });
-                                setUploading(false); setToastMsg("✅ Horarios actualizados");
-                            }} className="w-full text-xs bg-slate-900 p-2 rounded-lg"/>
-                        </div>
+                            } else {
+                                const rows = parseCSVText(text, text.includes(';') ? ';' : ',');
+                                for (let i = 2; i < rows.length; i++) {
+                                    if (!rows[i][0]) continue;
+                                    const normName = normalizeTeacherName(rows[i][0]);
+                                    result[normName] = {};
+                                    let colIdx = 1;
+                                    for (let d = 1; d <= 5; d++) {
+                                        for (let s = 1; s <= 6; s++) {
+                                            if (rows[i][colIdx]) result[normName][`${d}-${s}`] = rows[i][colIdx];
+                                            colIdx++;
+                                        }
+                                    }
+                                }
+                            }
+                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'schedules'), { list: result });
+                            setToastMsg("✅ Horarios actualizados.");
+                        } catch (err) { setToastMsg("❌ Error en horario."); }
+                        finally { setUploading(false); }
+                    };
+                    reader.readAsText(file, "windows-1252");
+                };
 
-                        <div className="p-4 bg-red-900/20 rounded-2xl border border-red-500/30">
-                            <h3 className="text-sm font-bold text-red-400 mb-3">Borrado Masivo</h3>
-                            <div className="flex gap-2 mb-3">
-                                <input id="delStart" type="date" className="flex-1 bg-slate-900 p-2 rounded-lg text-xs"/>
-                                <input id="delEnd" type="date" className="flex-1 bg-slate-900 p-2 rounded-lg text-xs"/>
-                            </div>
-                            <button onClick={() => handleMassDelete(document.getElementById('delStart').value, document.getElementById('delEnd').value)} className="w-full py-3 bg-red-600 rounded-xl text-xs font-bold">Ejecutar Limpieza</button>
-                        </div>
-                    </div>
-                </div>
-            );
+                if (isInitializing) return <div className="min-h-screen flex items-center justify-center text-slate-400">Iniciando sistema...</div>;
 
-            if (!teacherProfile) return (
-                <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-                    <form onSubmit={async (e) => {
-                        e.preventDefault();
-                        const idea = e.target.idea.value.trim().toLowerCase();
-                        const dni = e.target.dni.value.trim().toUpperCase();
-                        const prof = teachersDB[idea];
-                        if (prof && prof.dni === dni) {
-                            await window.FirebaseAPI.setDoc(window.FirebaseAPI.doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), { idea, name: prof.name });
-                        } else { alert("Credenciales incorrectas"); }
-                    }} className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm space-y-4">
-                        <div className="text-center pb-4">
-                            <h1 className="text-2xl font-bold text-blue-900">IES Odiel</h1>
-                            <p className="text-slate-500 text-sm">Control de Pasillos</p>
-                        </div>
-                        <input name="idea" type="text" placeholder="Usuario IdEA" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-blue-500 font-mono" required/>
-                        <input name="dni" type="password" placeholder="DNI" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-blue-500" required/>
-                        <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg">Entrar</button>
-                        <button type="button" onClick={() => {if(prompt("Clave:")==="odilea21") setIsAdminMode(true)}} className="w-full text-xs text-slate-400 mt-4">Acceso Gestión</button>
-                    </form>
-                </div>
-            );
-
-            return (
-                <div className="max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col shadow-2xl relative">
-                    {/* Header */}
-                    <header className="bg-blue-800 text-white p-4 sticky top-0 z-30 shadow-lg">
-                        <div className="flex justify-between items-center mb-4">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-blue-800 font-bold">O</div>
-                                <h2 className="font-bold">IES Odiel</h2>
-                            </div>
-                            <div className="flex items-center gap-2 text-[10px] bg-blue-900/50 px-3 py-1 rounded-full">
-                                <span className="max-w-[100px] truncate">{formatDisplayName(teacherProfile.name)}</span>
-                                <button onClick={() => window.FirebaseAPI.setDoc(window.FirebaseAPI.doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), {})} className="ml-1"><LogOut size={14}/></button>
-                            </div>
-                        </div>
-                        <nav className="flex gap-1 bg-blue-900/30 p-1 rounded-xl">
-                            {['list', 'history', 'report'].map(t => (
-                                <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-2 text-xs font-bold rounded-lg ${activeTab === t ? 'bg-white text-blue-900' : 'text-blue-100'}`}>
-                                    {t === 'list' ? 'Pasillos' : t === 'history' ? 'Historial' : 'Informes'}
-                                </button>
-                            ))}
-                        </nav>
-                    </header>
-
-                    <main className="flex-1 p-4 pb-24 overflow-y-auto custom-scrollbar">
-                        {activeTab === 'list' && (
-                            <div className="space-y-4">
-                                <div className="relative">
-                                    <select value={selectedUnit} onChange={(e) => handleUnitSelect(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl shadow-sm font-bold text-slate-700 outline-none appearance-none">
-                                        <option value="">🏫 Seleccionar Clase / Unidad</option>
-                                        {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                    </select>
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">▼</div>
-                                </div>
-
-                                <div className="relative">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                                    <input type="text" placeholder="Buscar alumno..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 ring-blue-500"/>
-                                </div>
-
-                                <div className="grid grid-cols-4 gap-2 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm text-center">
-                                    <div><p className="text-lg font-black">{todayStats.total}</p><p className="text-[8px] font-bold text-slate-400">TOTAL</p></div>
-                                    <div className="border-l"><p className="text-lg font-black text-blue-600">{todayStats.bano}</p><p className="text-[8px] font-bold text-slate-400">🚽</p></div>
-                                    <div className="border-l"><p className="text-lg font-black text-red-500">{todayStats.enf}</p><p className="text-[8px] font-bold text-slate-400">🤒</p></div>
-                                    <div className="border-l"><p className="text-lg font-black text-emerald-500">{todayStats.llamada}</p><p className="text-[8px] font-bold text-slate-400">📞</p></div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {filteredStudents.map(s => {
-                                        const count = todayRecords.filter(r => r.studentId === s.id).length;
-                                        return (
-                                            <div key={s.id} className={`bg-white p-4 rounded-2xl border ${count > 2 ? 'border-red-300 bg-red-50' : 'border-slate-200'} shadow-sm flex items-center justify-between`}>
-                                                <div className="flex-1 min-w-0 pr-2">
-                                                    <h4 className="font-bold text-slate-800 truncate text-sm">{s.name}</h4>
-                                                    <p className="text-[10px] text-slate-500">{s.unit}</p>
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <button onClick={() => registerAction(s.id, 'Baño')} className="p-2 bg-blue-50 text-blue-700 rounded-xl border border-blue-100"><Clock size={24}/></button>
-                                                    <button onClick={() => registerAction(s.id, 'Enfermedad')} className="p-2 bg-red-50 text-red-700 rounded-xl border border-red-100"><ShieldAlert size={24}/></button>
-                                                    <button onClick={() => setCallModal({studentId: s.id, name: s.name})} className="p-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100"><Phone size={24}/></button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'history' && (
-                            <div className="space-y-4">
-                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
-                                    <span className="text-sm font-bold text-slate-600">Fecha:</span>
-                                    <input type="date" value={historyDate} onChange={e => setHistoryDate(e.target.value)} className="p-2 border rounded-xl bg-slate-50 outline-none"/>
-                                </div>
-                                {historyRecords.map(r => (
-                                    <div key={r.id} className="bg-white p-4 rounded-2xl border-l-4 border-blue-500 shadow-sm flex items-center justify-between">
-                                        <div className="flex-1 min-w-0 pr-2">
-                                            <h4 className="font-bold text-sm truncate">{students.find(st => st.id === r.studentId)?.name || 'Anónimo'}</h4>
-                                            <p className="text-[10px] text-slate-500">
-                                                {new Date(r.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} | <b>{r.reason}</b>
-                                                {r.reason === 'Llamada' && <span className="block italic text-blue-600">Para: {r.callTarget} - {r.notes}</span>}
-                                            </p>
-                                        </div>
-                                        {r.teacherName === teacherProfile.name && (
-                                            <button onClick={async () => {
-                                                if(confirm("¿Anular registro?")) {
-                                                    await window.FirebaseAPI.deleteDoc(window.FirebaseAPI.doc(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`, r.id));
-                                                    setToastMsg("🗑️ Registro eliminado");
-                                                }
-                                            }} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {activeTab === 'report' && (
-                            <div className="space-y-4">
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-                                    <h3 className="font-bold text-blue-900">Informe del Curso</h3>
-                                    <select value={reportUnit} onChange={e => {setReportUnit(e.target.value); setReportStudentId('');}} className="w-full p-3 bg-slate-50 border rounded-xl text-sm">
-                                        <option value="">Seleccionar Unidad...</option>
-                                        {units.map(u => <option key={u} value={u}>{u}</option>)}
-                                    </select>
-                                    <select value={reportStudentId} onChange={e => setReportStudentId(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl text-sm">
-                                        <option value="">Todos los alumnos</option>
-                                        {students.filter(s => s.unit === reportUnit).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                    <button onClick={generateReport} disabled={!reportUnit || isLoadingReport} className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 disabled:bg-slate-300">
-                                        {isLoadingReport ? 'Buscando...' : 'Consultar Histórico'}
-                                    </button>
-                                </div>
-                                {reportRecords && (
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-bold text-slate-400 ml-2 uppercase">Resultados: {reportRecords.length}</p>
-                                        {reportRecords.map(r => (
-                                            <div key={r.id} className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
-                                                <div className="flex-1 truncate">
-                                                    <span className="font-bold">{new Date(r.timestamp).toLocaleDateString('es-ES', {day:'2-digit', month:'short'})}</span>
-                                                    <span className="mx-2 text-slate-200">|</span>
-                                                    <span>{students.find(st => st.id === r.studentId)?.name}</span>
-                                                </div>
-                                                <div className="font-bold text-blue-600">{r.reason === 'Enfermedad' ? '🤒' : r.reason === 'Llamada' ? '📞' : '🚽'}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </main>
-
-                    {/* Modal Llamada */}
-                    {callModal && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-4">
-                            <form onSubmit={(e) => {
-                                e.preventDefault();
-                                registerAction(callModal.studentId, 'Llamada', {
-                                    callTarget: e.target.target.value,
-                                    notes: e.target.notes.value
-                                });
-                            }} className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-slide-up">
-                                <h3 className="font-bold text-lg">Registro de Llamada</h3>
-                                <p className="text-slate-500 text-sm mb-6">{callModal.name}</p>
-                                <div className="space-y-4">
-                                    <select name="target" className="w-full p-4 bg-slate-50 border rounded-2xl" required>
-                                        <option value="">¿Quién recibe?</option>
-                                        <option value="Madre">Madre</option>
-                                        <option value="Padre">Padre</option>
-                                        <option value="Familiar">Familiar</option>
-                                        <option value="Otros">Otros</option>
-                                    </select>
-                                    <textarea name="notes" placeholder="Notas adicionales..." className="w-full p-4 bg-slate-50 border rounded-2xl h-24 resize-none focus:ring-2 ring-emerald-500 outline-none"></textarea>
-                                    <div className="flex gap-2">
-                                        <button type="button" onClick={() => setCallModal(null)} className="flex-1 py-4 font-bold text-slate-500">Cancelar</button>
-                                        <button type="submit" className="flex-1 py-4 font-bold bg-emerald-600 text-white rounded-2xl shadow-lg">Guardar</button>
-                                    </div>
-                                </div>
+                if (!teacherProfile && !isAdminMode) {
+                    return (
+                        <div className="min-h-screen flex flex-col items-center justify-center p-4">
+                            <button onClick={() => { const p = prompt("Contraseña:"); if(p==="odilea21") setIsAdminMode(true); }} className="absolute top-4 right-4 text-xs text-slate-400 flex items-center gap-1"><Settings size={14}/> Admin</button>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault(); setLoginError('');
+                                const t = teachersDB[ideaInput.toLowerCase()];
+                                if (t && t.dni === dniPassInput.toUpperCase()) {
+                                    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), { idea: ideaInput, name: t.name });
+                                    setTeacherProfile({ idea: ideaInput, name: t.name });
+                                } else { setLoginError("Credenciales incorrectas."); }
+                            }} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+                                <img src="./IES_Odiel_logo.jpg" className="w-20 mx-auto mb-4 rounded-xl border" />
+                                <h1 className="text-xl font-bold mb-6">IES Odiel</h1>
+                                <input type="text" placeholder="Usuario IdEA" value={ideaInput} onChange={e => setIdeaInput(e.target.value)} className="w-full p-3 border rounded-xl mb-3 outline-none focus:border-blue-500 font-mono text-center" required />
+                                <input type="password" placeholder="DNI" value={dniPassInput} onChange={e => setDniPassInput(e.target.value)} className="w-full p-3 border rounded-xl mb-6 outline-none focus:border-blue-500 text-center" required />
+                                <button className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors">Entrar</button>
+                                {loginError && <p className="text-red-500 text-sm mt-4">{loginError}</p>}
                             </form>
                         </div>
-                    )}
+                    );
+                }
 
-                    {/* Toast */}
-                    {toastMsg && (
-                        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-3 bg-slate-800 text-white text-sm font-bold rounded-full shadow-2xl z-[150] animate-bounce">
-                            {toastMsg}
-                        </div>
-                    )}
-
-                    {/* Modo Pasado */}
-                    {activeTab === 'list' && (
-                        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-                            <div className="bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-2xl border flex items-center justify-between gap-4">
-                                <div className="flex-1 flex items-center gap-2">
-                                    <div className={`w-2 h-2 rounded-full ${isRetroMode ? 'bg-purple-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                                    <span className="text-[10px] font-black uppercase text-slate-500">{isRetroMode ? 'Modo Pasado' : 'Tiempo Real'}</span>
+                if (isAdminMode) {
+                    return (
+                        <div className="min-h-screen bg-slate-800 p-4 flex flex-col items-center">
+                            <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="font-bold text-lg flex items-center gap-2"><Settings/> Administración</h2>
+                                    <button onClick={() => setIsAdminMode(false)}><X/></button>
                                 </div>
-                                <button onClick={() => setIsRetroMode(!isRetroMode)} className={`p-2 rounded-xl ${isRetroMode ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-400'}`}>
-                                    <CalendarClock size={20}/>
-                                </button>
-                                {isRetroMode && (
-                                    <input type="datetime-local" value={retroDateTime} onChange={e => setRetroDateTime(e.target.value)} className="absolute bottom-16 left-0 w-full p-4 bg-white rounded-2xl shadow-2xl border border-purple-200 outline-none text-xs font-bold"/>
-                                )}
+                                <div className="space-y-4">
+                                    <div className="p-3 bg-slate-50 border rounded-xl space-y-2">
+                                        <p className="text-xs font-bold text-slate-400 mb-1 uppercase">Actualizar Datos</p>
+                                        <label className="block p-2 bg-white border border-dashed rounded-lg text-center text-sm cursor-pointer hover:border-blue-500">
+                                            Subir Alumnado (.PDF/.CSV)
+                                            <input type="file" className="hidden" onChange={async (e) => {
+                                                const file = e.target.files[0]; if (!file) return; setUploading(true);
+                                                try {
+                                                    const rows = file.name.endsWith('.pdf') ? await parsePDF(file) : parseCSVText(await file.text());
+                                                    let hIdx=-1, nIdx=-1, uIdx=-1;
+                                                    for(let i=0; i<10; i++){ const r = rows[i].map(c => removeAccents(c.toLowerCase())); const ni=r.findIndex(c=>c.includes('alumno')); const ui=r.findIndex(c=>c.includes('unidad')); if(ni!==-1&&ui!==-1){ hIdx=i; nIdx=ni; uIdx=ui; break; } }
+                                                    const list = rows.slice(hIdx+1).map((r,idx) => (r[nIdx] && r[uIdx]) ? {id: removeAccents(r[nIdx])+idx, name: r[nIdx], unit: r[uIdx]} : null).filter(Boolean);
+                                                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list });
+                                                    setToastMsg("✅ Alumnado cargado.");
+                                                } catch(e) { setToastMsg("❌ Error."); } finally { setUploading(false); }
+                                            }} />
+                                        </label>
+                                        <label className="block p-2 bg-white border border-dashed rounded-lg text-center text-sm cursor-pointer hover:border-blue-500">
+                                            Subir Profesorado (.PDF)
+                                            <input type="file" className="hidden" onChange={async (e) => {
+                                                const file = e.target.files[0]; if (!file) return; setUploading(true);
+                                                try {
+                                                    const rows = await parsePDF(file);
+                                                    let hIdx=-1, nIdx=-1, iIdx=-1, dIdx=-1;
+                                                    for(let i=0; i<10; i++){ const r = rows[i].map(c => removeAccents(c.toLowerCase())); const ni=r.findIndex(c=>c.includes('empleado')); const ii=r.findIndex(c=>c.includes('idea')); const di=r.findIndex(c=>c.includes('dni')); if(ni!==-1&&ii!==-1&&di!==-1){ hIdx=i; nIdx=ni; iIdx=ii; dIdx=di; break; } }
+                                                    const result = {}; rows.slice(hIdx+1).forEach(r => { if(r[nIdx]&&r[iIdx]) result[r[iIdx].trim().toLowerCase()] = { name: r[nIdx].trim(), dni: r[dIdx].trim().toUpperCase() }; });
+                                                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list: result });
+                                                    setToastMsg("✅ Profesores cargados.");
+                                                } catch(e) { setToastMsg("❌ Error."); } finally { setUploading(false); }
+                                            }} />
+                                        </label>
+                                        <label className="block p-2 bg-white border border-dashed rounded-lg text-center text-sm cursor-pointer hover:border-blue-500">
+                                            Subir Horarios GHC (.HTML/.CSV)
+                                            <input type="file" className="hidden" onChange={handleUploadSchedules} />
+                                        </label>
+                                    </div>
+                                    <button onClick={async () => {
+                                        if(!confirm("¿Borrar hoy?")) return;
+                                        const dStr = new Date().toISOString().split('T')[0];
+                                        const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dStr}`));
+                                        snap.forEach(d => deleteDoc(d.ref));
+                                        setToastMsg("🗑️ Borrado completado.");
+                                    }} className="w-full py-2 bg-red-100 text-red-600 rounded-xl text-sm font-bold">Borrado Masivo (Hoy)</button>
+                                </div>
                             </div>
                         </div>
-                    )}
-                </div>
-            );
+                    );
+                }
+
+                return (
+                    <div className="min-h-screen bg-slate-50 flex flex-col max-w-md mx-auto shadow-2xl relative overflow-hidden">
+                        
+                        {toastMsg && (
+                            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white px-4 py-2 rounded-full text-sm shadow-xl flex items-center gap-2">
+                                <Info size={16}/> {toastMsg}
+                            </div>
+                        )}
+
+                        {recordToDelete && (
+                            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                                <div className="bg-white p-6 rounded-2xl w-full max-w-xs">
+                                    <h3 className="font-bold mb-2">Anular permiso</h3>
+                                    <p className="text-sm text-slate-500 mb-6">¿Borrar registro?</p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setRecordToDelete(null)} className="flex-1 py-2 bg-slate-100 rounded-xl font-bold">No</button>
+                                        <button onClick={async () => {
+                                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`, recordToDelete.id));
+                                            setRecordToDelete(null);
+                                        }} className="flex-1 py-2 bg-red-600 text-white rounded-xl font-bold">Sí</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {callModal && (
+                            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                                <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="font-bold text-lg">Registrar Llamada</h3>
+                                        <button onClick={() => setCallModal(null)}><X/></button>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mb-4 uppercase font-bold">{callModal.studentName}</p>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 mb-1 block">Persona contactada</label>
+                                            <select id="callTarget" className="w-full p-3 bg-slate-100 rounded-xl outline-none text-sm">
+                                                <option>Madre</option><option>Padre</option><option>Familiar</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 mb-1 block">Notas / Observaciones</label>
+                                            <textarea id="callNotes" className="w-full p-3 bg-slate-100 rounded-xl outline-none text-sm h-24" placeholder="Indica el motivo..."></textarea>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setCallModal(null)} className="flex-1 py-3 text-slate-400 font-bold">Cancelar</button>
+                                            <button onClick={() => {
+                                                const target = document.getElementById('callTarget').value;
+                                                const notes = document.getElementById('callNotes').value;
+                                                registerBreak(callModal.studentId, 'Llamada', target, notes);
+                                                setCallModal(null);
+                                            }} className="flex-1 py-3 bg-emerald-500 text-white rounded-2xl font-bold">Registrar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <header className="bg-blue-800 text-white p-4 sticky top-0 z-20 shadow-lg">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-2">
+                                    <img src="./IES_Odiel_logo.jpg" className="w-8 h-8 rounded-full bg-white p-0.5" />
+                                    <h1 className="font-bold">IES Odiel</h1>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[10px] bg-blue-900/50 px-2 py-1 rounded-full">{formatDisplayName(teacherProfile?.name)}</span>
+                                    <button onClick={async () => { if(confirm("¿Salir?")) { await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), {}); location.reload(); } }}><LogOut size={16}/></button>
+                                </div>
+                            </div>
+                            <div className="flex gap-1 bg-blue-900/40 p-1 rounded-xl">
+                                {['list', 'history', 'report'].map(t => (
+                                    <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === t ? 'bg-white text-blue-900 shadow' : 'text-blue-200'}`}>
+                                        {t === 'list' ? 'Pasillos' : t === 'history' ? 'Historial' : 'Informes'}
+                                    </button>
+                                ))}
+                            </div>
+                        </header>
+
+                        <main className="flex-1 overflow-y-auto p-4 no-scrollbar">
+                            {activeTab === 'list' && (
+                                <div className="space-y-4">
+                                    <div className="space-y-3 sticky top-0 z-10 bg-slate-50/90 backdrop-blur pb-2">
+                                        <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl shadow-sm text-sm font-bold">
+                                            <option value="">Todo el centro</option>
+                                            {units.map(u => <option key={u} value={u}>{u}</option>)}
+                                        </select>
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><Search size={18}/></div>
+                                            <input type="text" placeholder="Buscar alumno..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm outline-none shadow-sm" />
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[{L:'Total',V:todayStats.total,C:'slate'},{L:'Baño',V:todayStats.bano,C:'blue'},{L:'Enf.',V:todayStats.enf,C:'red'},{L:'Otros',V:todayStats.otros,C:'orange'}].map(s=>(
+                                                <div key={s.L} className={`bg-white p-2 rounded-xl border border-${s.C}-100 text-center shadow-sm`}>
+                                                    <p className={`text-lg font-black text-${s.C}-600 leading-none`}>{s.V}</p>
+                                                    <p className="text-[9px] uppercase font-bold text-slate-400 mt-1">{s.L}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <button onClick={() => setIsRetroMode(!isRetroMode)} className={`w-full p-3 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${isRetroMode ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-600'}`}>
+                                            <span className="flex items-center gap-2"><CalendarClock size={16}/> Registro Retroactivo</span>
+                                            <span>{isRetroMode ? 'ON' : 'OFF'}</span>
+                                        </button>
+                                        {isRetroMode && <input type="datetime-local" value={retroDateTime} onChange={e => setRetroDateTime(e.target.value)} className="w-full p-2 border-2 border-purple-200 rounded-lg text-sm" />}
+                                    </div>
+
+                                    <div className="space-y-2 pb-24">
+                                        {filteredStudents.map(s => {
+                                            const count = todayRecords.filter(r => r.studentId === s.id).length;
+                                            return (
+                                                <div key={s.id} className={`bg-white p-3 rounded-2xl border shadow-sm flex items-center justify-between gap-2 ${count > 2 ? 'border-red-200 bg-red-50' : 'border-slate-100'}`}>
+                                                    <div className="min-w-0 pr-2">
+                                                        <h3 className="font-bold text-sm truncate">{s.name}</h3>
+                                                        <p className="text-[10px] text-slate-400 font-bold">{s.unit} {count > 0 && <span className="text-red-500 ml-1">• Salidas: {count}</span>}</p>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => registerBreak(s.id, 'Baño')} className="w-10 h-10 bg-blue-50 text-blue-600 border border-blue-100 rounded-xl flex items-center justify-center"><Bath size={24}/></button>
+                                                        <button onClick={() => registerBreak(s.id, 'Enfermería')} className="w-10 h-10 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center"><Medkit size={24}/></button>
+                                                        <button onClick={() => registerBreak(s.id, 'Otros')} className="w-10 h-10 bg-orange-50 text-orange-600 border border-orange-100 rounded-xl flex items-center justify-center"><HelpCircle size={24}/></button>
+                                                        <button onClick={() => setCallModal({ studentId: s.id, studentName: s.name })} className="w-10 h-10 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl flex items-center justify-center"><Phone size={24}/></button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'history' && (
+                                <div className="space-y-4 pb-24">
+                                    <div className="bg-white p-3 rounded-2xl shadow-sm border flex items-center justify-between sticky top-0 z-10">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fecha Historial</span>
+                                        <input type="date" value={historyDate} onChange={e => setHistoryDate(e.target.value)} className="p-1 font-bold text-sm outline-none" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        {historyRecords.length === 0 ? (
+                                            <div className="text-center py-20 text-slate-300 flex flex-col items-center gap-2"><CheckCircle size={48}/><p>Sin registros.</p></div>
+                                        ) : historyRecords.map(r => {
+                                            const s = students.find(x => x.id === r.studentId);
+                                            const time = new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                            const isOwner = r.teacherName === teacherProfile?.name;
+                                            return (
+                                                <div key={r.id} className="bg-white p-3 rounded-2xl border-l-4 border-l-blue-500 shadow-sm flex items-center justify-between">
+                                                    <div className="min-w-0 flex-1 pr-2">
+                                                        <p className="font-bold text-xs truncate">{s?.name || 'Desconocido'}</p>
+                                                        <p className="text-[10px] text-slate-500 font-medium">
+                                                            {r.reason} {r.callTarget && <span className="text-emerald-600 ml-1">({r.callTarget}) {r.notes}</span>}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="text-right">
+                                                            <p className="text-[10px] font-black text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{time}</p>
+                                                            <p className="text-[8px] text-slate-400 font-bold mt-0.5">{formatDisplayName(r.teacherName)}</p>
+                                                        </div>
+                                                        {isOwner && <button onClick={() => setRecordToDelete(r)} className="text-slate-300 hover:text-red-500"><Trash2 size={20}/></button>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'report' && (
+                                <div className="space-y-4 pb-24">
+                                    <div className="bg-white p-5 rounded-3xl shadow-sm border space-y-4">
+                                        <h2 className="font-black text-lg flex items-center gap-2 text-blue-800"><BarChart/> Filtros</h2>
+                                        <select value={reportUnit} onChange={e => {setReportUnit(e.target.value); setReportStudentId('');}} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold border">
+                                            <option value="">Selecciona unidad...</option>
+                                            {units.map(u => <option key={u} value={u}>{u}</option>)}
+                                        </select>
+                                        {reportUnit && (
+                                            <select value={reportStudentId} onChange={e => setReportStudentId(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold border">
+                                                <option value="">Toda la clase</option>
+                                                {students.filter(s => s.unit === reportUnit).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                            </select>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="flex-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold" />
+                                            <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="flex-1 p-2.5 bg-slate-50 border rounded-xl text-xs font-bold" />
+                                        </div>
+                                        <button onClick={generateReport} disabled={!reportUnit || isLoadingReport} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-200 transition-all disabled:bg-slate-300">
+                                            {isLoadingReport ? "Cargando..." : "Generar Informe"}
+                                        </button>
+                                    </div>
+
+                                    {reportRecords && (
+                                        <div className="space-y-2">
+                                            {reportRecords.map(r => (
+                                                <div key={r.id} className="bg-white p-3 rounded-xl border shadow-sm flex items-center justify-between">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-bold text-xs truncate">{students.find(x => x.id === r.studentId)?.name || 'N/A'}</p>
+                                                        <p className="text-[9px] text-slate-400 font-bold">
+                                                            {r.reason} • {new Date(r.timestamp).toLocaleDateString()} {new Date(r.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                                        </p>
+                                                    </div>
+                                                    {r.reason === 'Llamada' && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Llamada</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </main>
+                    </div>
+                );
+            }
+
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        window.addEventListener('firebaseReady', () => root.render(<App />));
+        if (window.FirebaseAPI) { initReactApp(); }
+        else { window.addEventListener('firebaseReady', initReactApp); }
     </script>
 </body>
 </html>
