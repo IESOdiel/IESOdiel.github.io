@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Control de Pasillos - IES Odiel</title>
 
-    <!-- Librerías Externas -->
+    <!-- Librerías Externas (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -19,7 +19,6 @@
         body { 
             -webkit-tap-highlight-color: transparent; 
             overscroll-behavior-y: contain;
-            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
         select { 
             -webkit-appearance: none; 
@@ -32,590 +31,569 @@
             background: #cbd5e1;
             border-radius: 10px;
         }
-        input, select, textarea {
-            font-size: 16px !important;
-        }
-        .student-card {
-            transition: transform 0.1s ease, box-shadow 0.1s ease;
-        }
-        .student-card:active {
-            transform: scale(0.98);
-        }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-200">
+<body class="bg-slate-50 text-slate-900 antialiased">
     <div id="root"></div>
 
-    <!-- MÓDULO DE INICIALIZACIÓN DE FIREBASE -->
+    <!-- 1. CONFIGURACIÓN Y MÓDULOS DE FIREBASE -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+        const firebaseConfig = {
+            apiKey: "AIzaSyCeQ6so402oADraHknUMMdB95zLtz8hNd8",
+            authDomain: "control-de-pasillos.firebaseapp.com",
+            projectId: "control-de-pasillos",
+            storageBucket: "control-de-pasillos.firebasestorage.app",
+            messagingSenderId: "869022506837",
+            appId: "1:869022506837:web:d3d91eb5cfd8b66d2019dc",
+            measurementId: "G-X15S8NJVQV"
+        };
+
         window.FirebaseAPI = {
             initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
-            getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where
+            getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where,
+            firebaseConfig
         };
         window.dispatchEvent(new Event('firebaseReady'));
     </script>
 
-    <!-- LÓGICA DEL NÚCLEO DE LA APLICACIÓN (REACT) -->
+    <!-- 2. LÓGICA DE LA APLICACIÓN (REACT + BABEL) -->
     <script type="text/babel">
-        function initReactApp() {
-            const { useState, useMemo, useEffect, useRef } = React;
-            const {
-                initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
-                getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where
-            } = window.FirebaseAPI;
+        const { useState, useMemo, useEffect, useRef } = React;
 
-            // CONFIGURACIÓN FIREBASE (Source Context)
-            const firebaseConfig = {
-                apiKey: "AIzaSyCeQ6so402oADraHknUMMdB95zLtz8hNd8",
-                authDomain: "control-de-pasillos.firebaseapp.com",
-                projectId: "control-de-pasillos",
-                storageBucket: "control-de-pasillos.firebasestorage.app",
-                messagingSenderId: "869022506837",
-                appId: "1:869022506837:web:d3d91eb5cfd8b66d2019dc",
-                measurementId: "G-X15S8NJVQV"
-            };
+        // --- ICONOS VECTORIALES (SVG) ---
+        const WCIcon = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 12h10l1 4h-12z"/><path d="M7 2h10v4h-10z"/><path d="M5 22h14"/><path d="M12 6v6"/><path d="M15 22v-4"/><path d="M9 22v-4"/></svg>;
+        const MedicalCross = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/><rect x="2" y="2" width="20" height="20" rx="4"/></svg>;
+        const HelpCircle = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+        const Phone = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
+        const Trash2 = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
+        const Search = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+        const Clock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+        const CheckCircle = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+        const ShieldAlert = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+        const X = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        const Lock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+        const Calendar = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+        const Settings = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.8.96 1.41.96h.09a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
+        const LogOut = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+        const HistoryIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>;
+        const BarChart = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>;
 
-            const app = initializeApp(firebaseConfig);
-            const auth = getAuth(app);
-            const db = getFirestore(app);
-            const appId = "ies-odiel-app";
+        // --- FUNCIONES DE APOYO Y SOPORTE TÉCNICO (SOURCE CONTEXT) ---
+        const removeAccents = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
 
-            // TRAMOS HORARIOS IES ODIEL
-            const TIME_SLOTS = [
-                { id: 1, start: '08:30', end: '09:30' },
-                { id: 2, start: '09:30', end: '10:30' },
-                { id: 3, start: '10:30', end: '11:30' },
-                { id: 4, start: '12:00', end: '13:00' },
-                { id: 5, start: '13:00', end: '14:00' },
-                { id: 6, start: '14:00', end: '15:00' }
-            ];
+        const formatDisplayName = (fullName) => {
+            if (!fullName) return "";
+            if (fullName.includes(',')) {
+                const parts = fullName.split(',');
+                return `${parts[1].trim()} ${parts[0].trim()}`;
+            }
+            return fullName;
+        };
 
-            // ICONOGRAFÍA (SVG)
-            const ToiletIcon = ({size=24}) => (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 21h10"/><path d="M9 5h6"/><path d="M12 5v16"/><circle cx="12" cy="3" r="1"/></svg>
-            );
-            const PhoneIcon = ({size=24}) => (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            );
-            const SicknessIcon = ({size=24}) => (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-            );
-            const OthersIcon = ({size=24}) => (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            );
-            const Search = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-            const Trash2 = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
-            const Clock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-            const LogOut = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
-            const Settings = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.8.96 1.41.96h.09a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-            const X = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        const standardizeUnitCode = (text) => {
+            if (!text) return "";
+            let s = removeAccents(text.toUpperCase()).replace(/[^A-Z0-9]/g, '');
+            s = s.replace(/BACHILLERATO/g, 'BAC').replace(/BACH/g, 'BAC')
+                .replace(/BCHTO/g, 'BAC').replace(/BTO/g, 'BAC')
+                .replace(/BHCS/g, 'BAC').replace(/BCT/g, 'BAC')
+                .replace(/BCG/g, 'BAC').replace(/BCA/g, 'BAC').replace(/BAM/g, 'BAC');
+            s = s.replace(/EDUCACIONSECUNDARIAOBLIGATORIA/g, 'ESO');
+            s = s.replace(/PRIMERO/g, '1').replace(/SEGUNDO/g, '2').replace(/TERCERO/g, '3').replace(/CUARTO/g, '4');
+            return s;
+        };
 
-            // FUNCIONES DE APOYO (Faithful to Source Context)
-            const removeAccents = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-            const formatDisplayName = (fullName) => {
-                if (!fullName) return "";
-                if (fullName.includes(',')) {
-                    const parts = fullName.split(',');
-                    return `${parts[1].trim()} ${parts[0].trim()}`;
-                }
-                return fullName;
-            };
+        const parseUnitInfo = (u) => {
+            if (!u) return { full: '', level: '', group: '' };
+            const cleanU = u.trim();
+            const match = cleanU.match(/^(.*?)[-\s]+([a-zA-Z0-9])$/);
+            if (match) return { full: cleanU, level: match[1].trim(), group: match[2].toUpperCase() };
+            return { full: cleanU, level: cleanU, group: '' };
+        };
 
-            const normalizeTeacherName = (name) => {
-                if (!name) return "";
-                let clean = name.split('-')[0].split('(')[0];
-                return removeAccents(clean).replace(/[^a-zA-Z]/g, '').toUpperCase();
-            };
+        const normalizeTeacherName = (name) => {
+            if (!name) return "";
+            let clean = name.split('-')[0].split('(')[0];
+            return removeAccents(clean).replace(/[^a-zA-Z]/g, '').toUpperCase();
+        };
 
-            const standardizeUnitCode = (text) => {
-                if (!text) return "";
-                let s = removeAccents(text.toUpperCase()).replace(/[^A-Z0-9]/g, '');
-                s = s.replace(/BACHILLERATO/g, 'BAC').replace(/BACH/g, 'BAC').replace(/BCHTO/g, 'BAC').replace(/BTO/g, 'BAC');
-                s = s.replace(/EDUCACIONSECUNDARIAOBLIGATORIA/g, 'ESO');
-                s = s.replace(/PRIMERO/g, '1').replace(/SEGUNDO/g, '2').replace(/TERCERO/g, '3').replace(/CUARTO/g, '4');
-                return s;
-            };
+        const TIME_SLOTS = [
+            { id: 1, start: '08:30', end: '09:30' },
+            { id: 2, start: '09:30', end: '10:30' },
+            { id: 3, start: '10:30', end: '11:30' },
+            { id: 4, start: '12:00', end: '13:00' },
+            { id: 5, start: '13:00', end: '14:00' },
+            { id: 6, start: '14:00', end: '15:00' }
+        ];
 
-            function parseCSVText(text, delimiter = ',') {
-                let result = [], row = [], inQuotes = false, value = '';
-                text = text.replace(/^\uFEFF/, '');
-                for (let i = 0; i < text.length; i++) {
-                    let char = text[i], nextChar = text[i+1];
-                    if (char === '"') {
-                        if (inQuotes && nextChar === '"') { value += '"'; i++; }
-                        else { inQuotes = !inQuotes; }
-                    } else if (char === delimiter && !inQuotes) {
-                        row.push(value.trim()); value = '';
-                    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-                        if (char === '\r' && nextChar === '\n') i++;
-                        row.push(value.trim());
-                        if (row.some(c => c !== '')) result.push(row);
-                        row = []; value = '';
-                    } else { value += char; }
-                }
-                if (value || row.length > 0) {
+        // --- PARSERS DE ADMINISTRACIÓN ---
+        const parsePDF = async (file) => {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let rows = [];
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                let yRows = {};
+                content.items.forEach(item => {
+                    const str = item.str.trim();
+                    if (!str) return;
+                    const y = Math.round(item.transform[5] / 5) * 5;
+                    if (!yRows[y]) yRows[y] = [];
+                    yRows[y].push(item);
+                });
+                const sortedY = Object.keys(yRows).sort((a, b) => b - a);
+                sortedY.forEach(y => {
+                    const items = yRows[y].sort((a, b) => a.transform[4] - b.transform[4]);
+                    let rowArr = [];
+                    let currentCell = items[0].str.trim();
+                    let lastX = items[0].transform[4];
+                    let lastWidth = items[0].width;
+                    for (let j = 1; j < items.length; j++) {
+                        const item = items[j];
+                        const x = item.transform[4];
+                        if ((x - (lastX + lastWidth)) > 15) {
+                            rowArr.push(currentCell);
+                            currentCell = item.str.trim();
+                        } else {
+                            currentCell += ' ' + item.str.trim();
+                        }
+                        lastX = x; lastWidth = item.width || 0;
+                    }
+                    rowArr.push(currentCell);
+                    rows.push(rowArr.map(c => c.replace(/\s+/g, ' ')));
+                });
+            }
+            return rows;
+        };
+
+        function parseCSVText(text, delimiter = ',') {
+            let result = [], row = [], inQuotes = false, value = '';
+            text = text.replace(/^\uFEFF/, '');
+            for (let i = 0; i < text.length; i++) {
+                let char = text[i], nextChar = text[i+1];
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') { value += '"'; i++; }
+                    else { inQuotes = !inQuotes; }
+                } else if (char === delimiter && !inQuotes) {
+                    row.push(value.trim()); value = '';
+                } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                    if (char === '\r' && nextChar === '\n') i++;
                     row.push(value.trim());
                     if (row.some(c => c !== '')) result.push(row);
-                }
-                return result;
+                    row = []; value = '';
+                } else { value += char; }
             }
+            if (value || row.length > 0) {
+                row.push(value.trim());
+                if (row.some(c => c !== '')) result.push(row);
+            }
+            return result;
+        }
 
-            const parsePDF = async (file) => {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                let rows = [];
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    let yRows = {};
-                    content.items.forEach(item => {
-                        const str = item.str.trim();
-                        if (!str) return;
-                        const y = Math.round(item.transform[5] / 5) * 5;
-                        if (!yRows[y]) yRows[y] = [];
-                        yRows[y].push(item);
-                    });
-                    const sortedY = Object.keys(yRows).sort((a, b) => b - a);
-                    sortedY.forEach(y => {
-                        const items = yRows[y].sort((a, b) => a.transform[4] - b.transform[4]);
-                        let rowArr = [];
-                        let currentCell = items[0].str.trim();
-                        let lastX = items[0].transform[4], lastWidth = items[0].width;
-                        for (let j = 1; j < items.length; j++) {
-                            const item = items[j], x = item.transform[4];
-                            if ((x - (lastX + lastWidth)) > 15) {
-                                rowArr.push(currentCell);
-                                currentCell = item.str.trim();
-                            } else { currentCell += ' ' + item.str.trim(); }
-                            lastX = x; lastWidth = item.width || 0;
-                        }
-                        rowArr.push(currentCell);
-                        rows.push(rowArr);
-                    });
-                }
-                return rows;
-            };
+        // --- COMPONENTE PRINCIPAL ---
+        function App() {
+            const { 
+                initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
+                getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where,
+                firebaseConfig
+            } = window.FirebaseAPI;
 
-            const getStyles = (count) => {
-                if (count === 0) return { bg: 'bg-white', border: 'border-slate-200', badge: null };
-                if (count === 1) return { bg: 'bg-yellow-50', border: 'border-yellow-300', badge: 'bg-yellow-200 text-yellow-800' };
-                if (count === 2) return { bg: 'bg-orange-50', border: 'border-orange-300', badge: 'bg-orange-200 text-orange-800' };
-                return { bg: 'bg-red-50', border: 'border-red-300', badge: 'bg-red-200 text-red-800' };
-            };
+            const [user, setUser] = useState(null);
+            const [db, setDb] = useState(null);
+            const [teacherProfile, setTeacherProfile] = useState(null);
+            const [students, setStudents] = useState([]);
+            const [teachersDB, setTeachersDB] = useState({});
+            const [globalSchedules, setGlobalSchedules] = useState({});
+            const [activeTab, setActiveTab] = useState('pasillos');
+            const [isRetroMode, setIsRetroMode] = useState(false);
+            const [retroDateTime, setRetroDateTime] = useState("");
+            
+            const [selectedUnit, setSelectedUnit] = useState("");
+            const [searchTerm, setSearchTerm] = useState("");
+            
+            const [history, setHistory] = useState([]);
+            const [historyDate, setHistoryDate] = useState(new Date().toISOString().split('T')[0]);
 
-            function App() {
-                const [user, setUser] = useState(null);
-                const [teacherProfile, setTeacherProfile] = useState(null);
-                const [students, setStudents] = useState([]);
-                const [teachersDB, setTeachersDB] = useState({});
-                const [schedules, setSchedules] = useState({});
-                const [records, setRecords] = useState([]);
+            const [activeCallStudent, setActiveCallStudent] = useState(null);
+            const [activeOtherStudent, setActiveOtherStudent] = useState(null);
+            const [notesInput, setNotesInput] = useState("");
+
+            const [reportUnit, setReportUnit] = useState("Todos los cursos");
+            const [reportStart, setReportStart] = useState("");
+            const [reportEnd, setReportEnd] = useState(new Date().toISOString().split('T')[0]);
+            const [reportData, setReportData] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+
+            const appId = "ies-odiel-app";
+
+            useEffect(() => {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const firestore = getFirestore(app);
+                setDb(firestore);
+
+                signInAnonymously(auth);
+                onAuthStateChanged(auth, (u) => setUser(u));
+            }, []);
+
+            useEffect(() => {
+                if (!db || !user) return;
                 
-                const [activeTab, setActiveTab] = useState('pasillos');
-                const [selectedUnit, setSelectedUnit] = useState('');
-                const [searchTerm, setSearchTerm] = useState('');
-                const [toast, setToast] = useState('');
-                const [isAdmin, setIsAdmin] = useState(false);
-                const [isRetroMode, setIsRetroMode] = useState(false);
-                const [retroDateTime, setRetroDateTime] = useState('');
-
-                const [callModal, setCallModal] = useState({ show: false, student: null, target: 'Madre', notes: '' });
-                const [ideaInput, setIdeaInput] = useState('');
-                const [dniInput, setDniInput] = useState('');
-                const [reportFilters, setReportFilters] = useState({ unit: '', start: '', end: '' });
-                const [reportResults, setReportResults] = useState(null);
-
-                // FIREBASE SYNC
-                useEffect(() => {
-                    signInAnonymously(auth).catch(console.error);
-                    onAuthStateChanged(auth, u => setUser(u));
-                }, []);
-
-                useEffect(() => {
-                    if (!user) return;
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const unsubStudents = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), s => s.exists() && setStudents(s.data().list || []));
-                    const unsubTeachers = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), s => s.exists() && setTeachersDB(s.data().list || {}));
-                    const unsubSched = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'schedules'), s => s.exists() && setSchedules(s.data().list || {}));
-                    const unsubRecords = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `records_${todayStr}`), snap => {
-                        const data = []; snap.forEach(d => data.push({ id: d.id, ...d.data() }));
-                        setRecords(data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                    });
-                    return () => { unsubStudents(); unsubTeachers(); unsubSched(); unsubRecords(); };
-                }, [user]);
-
-                useEffect(() => {
-                    if (user) {
-                        getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active')).then(s => {
-                            if (s.exists() && s.data().name) setTeacherProfile(s.data());
-                        });
-                    }
-                }, [user]);
-
-                // SMART SCHEDULE LOGIC
-                useEffect(() => {
-                    if (!teacherProfile || Object.keys(schedules).length === 0 || students.length === 0) return;
-                    const check = () => {
-                        const now = (isRetroMode && retroDateTime) ? new Date(retroDateTime) : new Date();
-                        const day = now.getDay();
-                        if (day < 1 || day > 5) return;
-                        const time = now.getHours() * 60 + now.getMinutes();
-                        const slot = TIME_SLOTS.find(s => {
-                            const [sh, sm] = s.start.split(':').map(Number);
-                            const [eh, em] = s.end.split(':').map(Number);
-                            return time >= (sh * 60 + sm) && time < (eh * 60 + em);
-                        });
-                        if (slot) {
-                            const normName = normalizeTeacherName(teacherProfile.name);
-                            const teacherSched = schedules[normName];
-                            if (teacherSched) {
-                                const cell = teacherSched[`${day}-${slot.id}`];
-                                if (cell && !cell.toUpperCase().includes("GUARDIA")) {
-                                    const normCell = standardizeUnitCode(cell);
-                                    const matched = Array.from(new Set(students.map(s => s.unit))).find(u => normCell.includes(standardizeUnitCode(u)));
-                                    if (matched) setSelectedUnit(matched);
-                                }
-                            }
-                        }
-                    };
-                    check();
-                }, [teacherProfile, schedules, students, isRetroMode, retroDateTime]);
-
-                // CORE ACTION: REGISTER BREAK
-                const registerBreak = async (studentId, reason, callTarget = '', notes = '') => {
-                    const timestampToUse = (isRetroMode && retroDateTime) ? new Date(retroDateTime).toISOString() : new Date().toISOString();
-                    const datePartition = timestampToUse.split('T')[0];
-                    try {
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `records_${datePartition}`), {
-                            studentId,
-                            reason,
-                            callTarget,
-                            notes,
-                            teacherName: teacherProfile.name,
-                            teacherIdea: teacherProfile.idea,
-                            timestamp: timestampToUse,
-                            isRetroactive: isRetroMode
-                        });
-                        setToast(`✅ ${reason} registrado`);
-                        setTimeout(() => setToast(''), 3000);
-                        setCallModal({ show: false, student: null, target: 'Madre', notes: '' });
-                        if (isRetroMode) { setIsRetroMode(false); setRetroDateTime(''); }
-                    } catch (e) { alert("Error al guardar registro."); }
-                };
-
-                const handleLogin = (e) => {
-                    e.preventDefault();
-                    const idea = ideaInput.trim().toLowerCase();
-                    const tData = teachersDB[idea];
-                    if (tData && tData.dni === dniInput.trim().toUpperCase()) {
-                        const profile = { name: tData.name, idea };
-                        setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), profile);
-                        setTeacherProfile(profile);
-                    } else { alert("Credenciales incorrectas."); }
-                };
-
-                // ADMIN UPLOAD FUNCTIONS
-                const handleUpload = async (type, file) => {
-                    if (!file) return;
-                    let resultData;
-                    try {
-                        if (type === 'students') {
-                            const rows = file.name.endsWith('.pdf') ? await parsePDF(file) : parseCSVText(await file.text());
-                            resultData = { list: rows.slice(1).map((r, i) => ({ id: `s_${i}_${Date.now()}`, name: r[0], unit: r[1] })).filter(x => x.name && x.unit) };
-                        } else if (type === 'teachers') {
-                            const rows = await parsePDF(file);
-                            const map = {};
-                            rows.slice(1).forEach(r => { if(r[1]) map[r[1].toLowerCase()] = { name: r[0], dni: r[2] }; });
-                            resultData = { list: map };
-                        } else if (type === 'schedules') {
-                            const text = await file.text();
-                            const map = {}; // Simplified GHC parser simulation
-                            setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'schedules'), { list: {} }); 
-                            alert("Sube un archivo HTML de GHC para procesar horarios."); return;
-                        }
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', type), resultData);
-                        alert(`✅ ${type} actualizado.`);
-                    } catch (e) { alert("Error procesando archivo."); }
-                };
-
-                if (!teacherProfile) {
-                    return (
-                        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-                            <form onSubmit={handleLogin} className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border border-slate-100">
-                                <div className="text-center mb-10">
-                                    <div className="bg-blue-600 w-20 h-20 rounded-3xl mx-auto mb-6 flex items-center justify-center text-white shadow-xl rotate-3">
-                                        <Clock size={40} />
-                                    </div>
-                                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">IES Odiel</h1>
-                                    <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mt-2">Control de Pasillos</p>
-                                </div>
-                                <div className="space-y-4">
-                                    <input type="text" placeholder="Usuario IdEA" value={ideaInput} onChange={e => setIdeaInput(e.target.value)} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-blue-500 transition-all font-medium" required />
-                                    <input type="password" placeholder="DNI (con letra)" value={dniInput} onChange={e => setDniInput(e.target.value)} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-blue-500 transition-all font-medium uppercase" required />
-                                    <button type="submit" className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">ACCEDER</button>
-                                </div>
-                                <button type="button" onClick={() => { if(prompt("Password Admin:")==="odilea21") setIsAdmin(true); }} className="w-full mt-8 text-[10px] font-black text-slate-300 hover:text-slate-500 uppercase tracking-widest">Panel de Administración</button>
-                            </form>
-                        </div>
-                    );
-                }
-
-                if (isAdmin) {
-                    return (
-                        <div className="p-6 max-w-md mx-auto space-y-6">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-2xl font-black">Administración</h2>
-                                <button onClick={() => setIsAdmin(false)} className="p-3 bg-slate-200 rounded-2xl"><X /></button>
-                            </div>
-                            <div className="bg-white p-8 rounded-[2rem] shadow-sm border space-y-6">
-                                <div className="space-y-4">
-                                    <label className="block text-xs font-black uppercase text-slate-400">Carga de Datos</label>
-                                    <button onClick={() => document.getElementById('upS').click()} className="w-full py-4 bg-slate-50 rounded-2xl text-sm font-bold border-2 border-dashed border-slate-200 hover:border-blue-400 transition-colors">Subir Alumnado (PDF/CSV)</button>
-                                    <button onClick={() => document.getElementById('upT').click()} className="w-full py-4 bg-slate-50 rounded-2xl text-sm font-bold border-2 border-dashed border-slate-200 hover:border-emerald-400 transition-colors">Subir Profesorado (PDF)</button>
-                                    <button onClick={() => alert("Sube el HTML de GHC directamente")} className="w-full py-4 bg-slate-50 rounded-2xl text-sm font-bold border-2 border-dashed border-slate-200 hover:border-purple-400 transition-colors">Subir Horarios GHC</button>
-                                    <input type="file" id="upS" className="hidden" onChange={e => handleUpload('students', e.target.files[0])} />
-                                    <input type="file" id="upT" className="hidden" onChange={e => handleUpload('teachers', e.target.files[0])} />
-                                </div>
-                                <div className="pt-6 border-t">
-                                    <button onClick={async () => { if(confirm("¿BORRAR TODO?")) { /* Add mass delete logic */ } }} className="w-full py-4 bg-red-50 text-red-600 rounded-2xl text-sm font-black border border-red-100 hover:bg-red-100 transition-colors">BORRADO DE PRUEBAS</button>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                }
-
-                const uniqueUnits = Array.from(new Set(students.map(s => s.unit))).filter(Boolean).sort();
-                const filteredStudents = students.filter(s => {
-                    const matchesUnit = selectedUnit ? s.unit === selectedUnit : true;
-                    const matchesSearch = removeAccents(s.name.toLowerCase()).includes(removeAccents(searchTerm.toLowerCase()));
-                    return matchesUnit && matchesSearch;
+                const unsubStudents = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), (s) => {
+                    if (s.exists()) setStudents(s.data().list || []);
                 });
 
+                const unsubTeachers = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), (s) => {
+                    if (s.exists()) setTeachersDB(s.data().list || {});
+                });
+
+                const unsubHistory = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`), (snap) => {
+                    const data = snap.docs.map(d => ({ id: d.id, ...d.data(), datePartition: historyDate }));
+                    setHistory(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+                });
+
+                getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active')).then(s => {
+                    if (s.exists()) setTeacherProfile(s.data());
+                });
+
+                return () => { unsubStudents(); unsubTeachers(); unsubHistory(); };
+            }, [db, user, historyDate]);
+
+            // Lógica Filtrado Pasillos (Ignore strictly if no unit)
+            const filteredStudents = useMemo(() => {
+                return students.filter(s => {
+                    if (!s.unit) return false;
+                    const matchesUnit = selectedUnit === "" || s.unit === selectedUnit;
+                    const normSearch = removeAccents(searchTerm.toLowerCase());
+                    const matchesSearch = removeAccents(s.name.toLowerCase()).includes(normSearch);
+                    return matchesUnit && matchesSearch;
+                });
+            }, [students, selectedUnit, searchTerm]);
+
+            const availableUnits = useMemo(() => {
+                return [...new Set(students.map(s => s.unit))].filter(Boolean).sort();
+            }, [students]);
+
+            const registerBreak = async (studentId, reason, notes = "") => {
+                const now = isRetroMode && retroDateTime ? new Date(retroDateTime) : new Date();
+                const datePartition = now.toISOString().split('T')[0];
+                
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `records_${datePartition}`), {
+                        studentId,
+                        teacherName: teacherProfile.name,
+                        timestamp: now.toISOString(),
+                        isRetroactive: isRetroMode,
+                        reason,
+                        notes
+                    });
+                    
+                    setActiveCallStudent(null);
+                    setActiveOtherStudent(null);
+                    setNotesInput("");
+                    if(isRetroMode) setIsRetroMode(false);
+                } catch (e) {
+                    alert("Error en el registro: " + e.message);
+                }
+            };
+
+            const handleGenerateReport = async () => {
+                setIsLoading(true);
+                let allRecords = [];
+                const start = new Date(reportStart || "2024-09-01");
+                const end = new Date(reportEnd);
+                
+                let current = new Date(start);
+                while (current <= end) {
+                    const dateStr = current.toISOString().split('T')[0];
+                    const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dateStr}`));
+                    snap.forEach(d => {
+                        const rec = d.data();
+                        const student = students.find(s => s.id === rec.studentId);
+                        if (reportUnit === "Todos los cursos" || (student && student.unit === reportUnit)) {
+                            allRecords.push({ ...rec, studentName: student ? student.name : "Desconocido", unit: student ? student.unit : "?" });
+                        }
+                    });
+                    current.setDate(current.getDate() + 1);
+                }
+                setReportData(allRecords.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+                setIsLoading(false);
+            };
+
+            // ADMINISTRACIÓN: CARGA DE DATOS (FULL IMPLEMENTATION)
+            const handleUploadStudents = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setIsLoading(true);
+                try {
+                    let rows = file.name.toLowerCase().endsWith('.pdf') ? await parsePDF(file) : parseCSVText(await file.text(), ',');
+                    let headerIdx = rows.findIndex(row => row.some(c => removeAccents(c.toLowerCase()).includes('alumno')));
+                    if (headerIdx === -1) headerIdx = 0;
+
+                    const nameIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('alumno'));
+                    const unitIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('unidad'));
+                    const tlfIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('telefono'));
+                    const urgIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('urgencia'));
+                    const t1Idx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('primer tutor'));
+                    const t2Idx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('segundo'));
+
+                    const result = rows.slice(headerIdx + 1).map((row, idx) => {
+                        if (!row[nameIdx]) return null;
+                        return {
+                            id: `std_${idx}_${Date.now()}`,
+                            name: row[nameIdx].trim(),
+                            unit: row[unitIdx] ? row[unitIdx].trim() : "",
+                            tlf: row[tlfIdx] || "",
+                            tlfUrgencia: row[urgIdx] || "",
+                            tlf1Tutor: row[t1Idx] || "",
+                            tlf2Tutor: row[t2Idx] || ""
+                        };
+                    }).filter(s => s && s.name);
+
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: result });
+                    alert("Alumnado actualizado correctamente");
+                } catch (err) { alert("Error al procesar: " + err.message); }
+                setIsLoading(false);
+            };
+
+            const handleUploadTeachers = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setIsLoading(true);
+                try {
+                    let rows = file.name.toLowerCase().endsWith('.pdf') ? await parsePDF(file) : parseCSVText(await file.text(), ',');
+                    let headerIdx = rows.findIndex(row => row.some(c => removeAccents(c.toLowerCase()).includes('idea')));
+                    if (headerIdx === -1) headerIdx = 0;
+
+                    const nameIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('empleado') || removeAccents(c.toLowerCase()).includes('nombre'));
+                    const ideaIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('idea'));
+                    const dniIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('dni'));
+
+                    const result = {};
+                    rows.slice(headerIdx + 1).forEach(row => {
+                        if (row[ideaIdx] && row[dniIdx]) {
+                            result[row[ideaIdx].trim().toLowerCase()] = {
+                                name: row[nameIdx].trim(),
+                                dni: row[dniIdx].trim().toUpperCase()
+                            };
+                        }
+                    });
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list: result });
+                    alert("Profesorado actualizado correctamente");
+                } catch (err) { alert("Error al procesar profesorado: " + err.message); }
+                setIsLoading(false);
+            };
+
+            if (!teacherProfile) {
                 return (
-                    <div className="min-h-screen flex flex-col bg-slate-100">
-                        {/* HEADER */}
-                        <header className="bg-white border-b border-slate-200 p-4 sticky top-0 z-40 shadow-sm">
-                            <div className="flex justify-between items-center max-w-md mx-auto">
-                                <div>
-                                    <h1 className="font-black text-xl text-blue-900 tracking-tighter">IES Odiel</h1>
-                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest leading-none">{formatDisplayName(teacherProfile.name)}</p>
-                                </div>
-                                <button onClick={() => { setTeacherProfile(null); setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), {}); }} className="text-slate-300 p-2 hover:text-red-500 transition-colors">
-                                    <LogOut size={22} />
-                                </button>
-                            </div>
-                        </header>
-
-                        {/* NAV */}
-                        <nav className="flex bg-white border-b border-slate-200 max-w-md mx-auto w-full sticky top-[69px] z-30">
-                            {['pasillos', 'historial', 'informes'].map(tab => (
-                                <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all ${activeTab === tab ? 'text-blue-600 border-b-[3px] border-blue-600 bg-blue-50/30' : 'text-slate-400'}`}>
-                                    {tab}
-                                </button>
-                            ))}
-                        </nav>
-
-                        <main className="flex-1 p-4 max-w-md mx-auto w-full pb-28">
-                            
-                            {activeTab === 'pasillos' && (
-                                <div className="space-y-4">
-                                    {/* FILTERS */}
-                                    <div className="space-y-2 sticky top-[130px] z-20 bg-slate-100 pb-2">
-                                        <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl shadow-sm text-sm font-black text-slate-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                            <option value="">TODOS LOS GRUPOS</option>
-                                            {uniqueUnits.map(u => <option key={u} value={u}>{u}</option>)}
-                                        </select>
-                                        <div className="relative">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                                            <input type="text" placeholder="Buscar alumno..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm text-sm font-medium outline-none" />
-                                        </div>
-                                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                                            <button onClick={() => setIsRetroMode(!isRetroMode)} className={`w-full p-3 text-[10px] font-black uppercase flex items-center justify-between transition-colors ${isRetroMode ? 'bg-purple-600 text-white' : 'text-slate-400'}`}>
-                                                <span>📅 Registro Manual / Pasado</span>
-                                                <span>{isRetroMode ? 'ACTIVADO' : 'ABRIR'}</span>
-                                            </button>
-                                            {isRetroMode && (
-                                                <div className="p-3 bg-purple-50 flex gap-2">
-                                                    <input type="datetime-local" value={retroDateTime} onChange={e => setRetroDateTime(e.target.value)} className="flex-1 p-3 bg-white border border-purple-200 rounded-xl text-xs font-bold outline-none" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* LIST */}
-                                    <div className="space-y-3">
-                                        {filteredStudents.map(student => {
-                                            const sRecords = records.filter(r => r.studentId === student.id);
-                                            const counts = {
-                                                bano: sRecords.filter(r => r.reason === 'Baño').length,
-                                                llamada: sRecords.filter(r => r.reason === 'Llamada').length,
-                                                enf: sRecords.filter(r => r.reason === 'Enfermedad').length,
-                                                otros: sRecords.filter(r => r.reason === 'Otros').length
-                                            };
-                                            const total = sRecords.length;
-                                            const styles = getStyles(total);
-
-                                            return (
-                                                <div key={student.id} className={`${styles.bg} p-4 rounded-3xl border ${styles.border} shadow-sm flex items-center justify-between student-card`}>
-                                                    <div className="flex-1 min-w-0 pr-2">
-                                                        <h3 className="font-bold text-sm text-slate-800 truncate">{student.name}</h3>
-                                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">{student.unit}</p>
-                                                    </div>
-                                                    <div className="flex gap-1.5">
-                                                        {[
-                                                            { reason: 'Baño', icon: <ToiletIcon />, color: 'blue', title: 'Ir al Baño', count: counts.bano },
-                                                            { reason: 'Llamada', icon: <PhoneIcon />, color: 'emerald', title: 'Registrar Llamada', count: counts.llamada, isCall: true },
-                                                            { reason: 'Enfermedad', icon: <SicknessIcon />, color: 'red', title: 'Enfermería/Malestar', count: counts.enf },
-                                                            { reason: 'Otros', icon: <OthersIcon />, color: 'amber', title: 'Otros motivos', count: counts.otros }
-                                                        ].map(btn => (
-                                                            <button 
-                                                                key={btn.reason} 
-                                                                title={btn.title}
-                                                                aria-label={btn.title}
-                                                                onClick={() => btn.isCall ? setCallModal({ show: true, student, target: 'Madre', notes: '' }) : registerBreak(student.id, btn.reason)}
-                                                                className={`relative p-2.5 bg-${btn.color}-50 text-${btn.color}-600 rounded-xl hover:bg-${btn.color}-100 transition-all active:scale-90 border border-${btn.color}-100`}
-                                                            >
-                                                                {btn.icon}
-                                                                {btn.count > 0 && <span className={`absolute -top-1.5 -right-1.5 bg-${btn.color}-600 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-lg shadow-sm`}>{btn.count}</span>}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {activeTab === 'historial' && (
-                                <div className="space-y-3">
-                                    {records.length === 0 ? (
-                                        <div className="text-center py-24 text-slate-300 font-black uppercase text-xs tracking-widest">Sin registros hoy</div>
-                                    ) : (
-                                        records.map(record => {
-                                            const student = students.find(s => s.id === record.studentId);
-                                            return (
-                                                <div key={record.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-                                                    <div className="flex-1 min-w-0 pr-4">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md">{new Date(record.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                                                            <h4 className="font-bold text-xs text-slate-700 truncate">{student?.name || 'Cargando...'}</h4>
-                                                        </div>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">
-                                                            Motivo: <span className="text-blue-600">{record.reason}</span> {record.callTarget && `(${record.callTarget})`} · Por: {formatDisplayName(record.teacherName)}
-                                                        </p>
-                                                        {record.notes && <p className="mt-1 text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">"{record.notes}"</p>}
-                                                    </div>
-                                                    {record.teacherIdea === teacherProfile.idea && (
-                                                        <button onClick={async () => { if(confirm("¿Borrar registro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `records_${new Date().toISOString().split('T')[0]}`, record.id)); }} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18} /></button>
-                                                    )}
-                                                </div>
-                                            );
-                                        })
-                                    )}
-                                </div>
-                            )}
-
-                            {activeTab === 'informes' && (
-                                <div className="space-y-4">
-                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                                        <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest flex items-center gap-2"><Clock size={16} className="text-blue-600" /> Generar Informe</h3>
-                                        <div className="space-y-3">
-                                            <select value={reportFilters.unit} onChange={e => setReportFilters({...reportFilters, unit: e.target.value})} className="w-full p-4 bg-slate-50 border rounded-2xl text-xs font-black">
-                                                <option value="">ELEGIR UNIDAD</option>
-                                                {uniqueUnits.map(u => <option key={u} value={u}>{u}</option>)}
-                                            </select>
-                                            <div className="flex gap-2">
-                                                <input type="date" value={reportFilters.start} onChange={e => setReportFilters({...reportFilters, start: e.target.value})} className="flex-1 p-4 bg-slate-50 border rounded-2xl text-xs font-bold" />
-                                                <input type="date" value={reportFilters.end} onChange={e => setReportFilters({...reportFilters, end: e.target.value})} className="flex-1 p-4 bg-slate-50 border rounded-2xl text-xs font-bold" />
-                                            </div>
-                                            <button onClick={async () => {
-                                                if(!reportFilters.unit || !reportFilters.start) return alert("Selecciona unidad y fecha.");
-                                                setReportResults([]);
-                                                const dStart = new Date(reportFilters.start), dEnd = reportFilters.end ? new Date(reportFilters.end) : new Date();
-                                                let results = [];
-                                                for(let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
-                                                    const dStr = d.toISOString().split('T')[0];
-                                                    const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dStr}`));
-                                                    snap.forEach(docSnap => {
-                                                        const data = docSnap.data();
-                                                        const student = students.find(s => s.id === data.studentId);
-                                                        if(student && student.unit === reportFilters.unit) results.push({ id: docSnap.id, date: dStr, ...data, studentName: student.name });
-                                                    });
-                                                }
-                                                setReportResults(results.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                                            }} className="w-full py-5 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100 uppercase text-xs tracking-widest active:scale-95 transition-all">Consultar</button>
-                                        </div>
-                                    </div>
-                                    {reportResults && (
-                                        <div className="space-y-2">
-                                            {reportResults.map(r => (
-                                                <div key={r.id} className="bg-white p-4 rounded-2xl border text-[10px]">
-                                                    <div className="flex justify-between font-black mb-1">
-                                                        <span className="text-slate-800">{r.studentName}</span>
-                                                        <span className="text-slate-400">{r.date}</span>
-                                                    </div>
-                                                    <p className="text-slate-600 font-bold uppercase">
-                                                        <span className={r.reason === 'Llamada' ? 'text-emerald-600' : 'text-blue-600'}>{r.reason}</span> 
-                                                        {r.callTarget && ` - DESTINATARIO: ${r.callTarget}`}
-                                                    </p>
-                                                    {r.notes && <p className="mt-1 text-slate-500 italic bg-slate-50 p-2 rounded-lg">Obs: {r.notes}</p>}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </main>
-
-                        {/* CALL MODAL */}
-                        {callModal.show && (
-                            <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
-                                <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
-                                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">Registro de Llamada</h3>
-                                    <p className="text-xs text-slate-400 mt-1 mb-6 font-bold uppercase tracking-wider">{callModal.student?.name}</p>
-                                    <div className="space-y-6">
-                                        <div>
-                                            <p className="text-[10px] font-black uppercase text-slate-300 mb-3 tracking-widest">Destinatario</p>
-                                            <div className="flex gap-2">
-                                                {['Madre', 'Padre', 'Familiar'].map(t => (
-                                                    <button key={t} onClick={() => setCallModal({...callModal, target: t})} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${callModal.target === t ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100' : 'bg-slate-50 text-slate-400 border-transparent'}`}>{t}</button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black uppercase text-slate-300 mb-3 tracking-widest">Observaciones</p>
-                                            <textarea value={callModal.notes} onChange={e => setCallModal({...callModal, notes: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm outline-none focus:border-emerald-500 min-h-[100px] font-medium" placeholder="Notas de la llamada..." />
-                                        </div>
-                                        <div className="flex gap-3">
-                                            <button onClick={() => setCallModal({show: false, student: null, target: 'Madre', notes: ''})} className="flex-1 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl uppercase text-[10px] tracking-widest">Cancelar</button>
-                                            <button onClick={() => registerBreak(callModal.student.id, 'Llamada', callModal.target, callModal.notes)} className="flex-[2] py-4 bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 uppercase text-[10px] tracking-widest active:scale-95 transition-all">Confirmar</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* TOAST */}
-                        {toast && (
-                            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white px-8 py-4 rounded-3xl text-xs font-black shadow-2xl flex items-center gap-3 border border-slate-700 animate-in fade-in zoom-in slide-in-from-bottom-4 uppercase tracking-[0.2em]">
-                                <Clock size={16} className="text-blue-400" /> {toast}
-                            </div>
-                        )}
+                    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            const idea = e.target.idea.value.trim().toLowerCase();
+                            const dni = e.target.dni.value.trim().toUpperCase();
+                            const t = teachersDB[idea];
+                            if (t && t.dni === dni) {
+                                const profile = { name: t.name, idea };
+                                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), profile);
+                                setTeacherProfile(profile);
+                            } else alert("Credenciales inválidas");
+                        }} className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm border border-slate-200">
+                            <h1 className="text-2xl font-bold text-blue-800 mb-2 text-center">IES Odiel</h1>
+                            <p className="text-slate-500 text-sm mb-6 text-center">Acceso Control Pasillos</p>
+                            <input name="idea" placeholder="Usuario IdEA" className="w-full mb-3 p-3 rounded-xl border border-slate-300 outline-none focus:ring-2 ring-blue-500" required />
+                            <input name="dni" type="password" placeholder="DNI" className="w-full mb-6 p-3 rounded-xl border border-slate-300 outline-none focus:ring-2 ring-blue-500" required />
+                            <button className="w-full bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-blue-800 transition-colors">Entrar</button>
+                        </form>
                     </div>
                 );
             }
 
-            const root = ReactDOM.createRoot(document.getElementById('root'));
-            root.render(<App />);
+            return (
+                <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white shadow-2xl overflow-hidden">
+                    <header className="bg-blue-800 text-white p-4 shadow-lg shrink-0">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <h1 className="font-bold text-lg">IES Odiel</h1>
+                                <p className="text-[10px] opacity-80">{formatDisplayName(teacherProfile.name)}</p>
+                            </div>
+                            <button onClick={() => setTeacherProfile(null)} className="p-2 bg-blue-900 rounded-lg hover:bg-red-800 transition-colors">
+                                <LogOut size={18} />
+                            </button>
+                        </div>
+                        <nav className="flex gap-2">
+                            {['pasillos', 'historial', 'informes', 'admin'].map(tab => (
+                                <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-2 text-[10px] font-bold rounded-xl transition-all ${activeTab === tab ? 'bg-white text-blue-800' : 'bg-blue-700'}`}>
+                                    {tab.toUpperCase()}
+                                </button>
+                            ))}
+                        </nav>
+                    </header>
+
+                    <main className="flex-1 overflow-y-auto custom-scrollbar p-4 relative">
+                        {activeTab === 'pasillos' && (
+                            <div className="space-y-4">
+                                <div className="sticky top-0 bg-white pb-2 z-10 space-y-3">
+                                    <select className="w-full p-3 bg-slate-100 border rounded-2xl text-sm font-bold" value={selectedUnit} onChange={(e) => setSelectedUnit(e.target.value)}>
+                                        <option value="">Todas las unidades</option>
+                                        {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                                    </select>
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-3 text-slate-400" size={18} />
+                                        <input placeholder="Buscar alumno..." className="w-full pl-10 p-3 bg-slate-50 border rounded-2xl text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                                    </div>
+                                    <button onClick={() => setIsRetroMode(!isRetroMode)} className={`w-full py-2 text-[10px] font-bold rounded-lg border ${isRetroMode ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-slate-50 text-slate-500'}`}>
+                                        {isRetroMode ? "MODO RETROACTIVO ACTIVADO" : "REGISTRAR SALIDA PASADA"}
+                                    </button>
+                                    {isRetroMode && <input type="datetime-local" className="w-full p-2 border rounded-lg text-sm" value={retroDateTime} onChange={(e) => setRetroDateTime(e.target.value)} />}
+                                </div>
+                                <div className="space-y-2">
+                                    {filteredStudents.map(student => (
+                                        <div key={student.id} className="bg-white border p-4 rounded-3xl shadow-sm flex items-center justify-between gap-4">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-bold text-sm text-slate-800 truncate">{student.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase">{student.unit}</p>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <button onClick={() => registerBreak(student.id, "Baño")} className="p-3 bg-blue-50 text-blue-700 rounded-2xl"><WCIcon /></button>
+                                                <button onClick={() => registerBreak(student.id, "Enfermedad")} className="p-3 bg-red-50 text-red-700 rounded-2xl"><MedicalCross /></button>
+                                                <button onClick={() => setActiveCallStudent(student)} className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl"><Phone /></button>
+                                                <button onClick={() => setActiveOtherStudent(student)} className="p-3 bg-slate-50 text-slate-700 rounded-2xl"><HelpCircle /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'historial' && (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between sticky top-0 bg-white pb-2">
+                                    <h2 className="font-bold text-slate-500 text-sm uppercase">Registros:</h2>
+                                    <input type="date" className="p-2 border rounded-xl text-sm" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    {history.map(record => {
+                                        const s = students.find(x => x.id === record.studentId);
+                                        const canDelete = record.teacherName === teacherProfile.name;
+                                        return (
+                                            <div key={record.id} className="p-4 bg-slate-50 rounded-2xl border flex items-center justify-between">
+                                                <div className="flex-1">
+                                                    <p className="font-bold text-sm">{s ? `${s.name} (${s.unit})` : 'Desconocido'}</p>
+                                                    <p className="text-[10px] text-slate-500">{new Date(record.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {record.reason}</p>
+                                                    {record.notes && <p className="text-[10px] italic text-blue-600 mt-1">Nota: {record.notes}</p>}
+                                                </div>
+                                                {canDelete && (
+                                                    <button onClick={async () => {
+                                                        if(confirm("¿Eliminar registro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`, record.id));
+                                                    }} className="p-2 text-red-300 hover:text-red-600"><Trash2 size={18}/></button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'informes' && (
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-4 rounded-3xl border space-y-3">
+                                    <select className="w-full p-3 rounded-xl border text-sm" value={reportUnit} onChange={(e) => setReportUnit(e.target.value)}>
+                                        <option>Todos los cursos</option>
+                                        {availableUnits.map(u => <option key={u}>{u}</option>)}
+                                    </select>
+                                    <div className="flex gap-2">
+                                        <input type="date" className="flex-1 p-3 rounded-xl border text-sm" onChange={(e) => setReportStart(e.target.value)} />
+                                        <input type="date" className="flex-1 p-3 rounded-xl border text-sm" value={reportEnd} onChange={(e) => setReportEnd(e.target.value)} />
+                                    </div>
+                                    <button onClick={handleGenerateReport} disabled={isLoading} className="w-full bg-blue-800 text-white py-3 rounded-xl font-bold">
+                                        {isLoading ? "Cargando..." : "Generar Informe"}
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    {reportData.map((r, i) => (
+                                        <div key={i} className="p-3 bg-white border rounded-xl text-xs flex justify-between items-center">
+                                            <div>
+                                                <span className="font-bold">{r.studentName}</span> <span className="text-slate-400">({r.unit})</span>
+                                                <p className="text-[10px] text-slate-500">{new Date(r.timestamp).toLocaleDateString()} - {r.reason}</p>
+                                                {r.notes && <p className="text-[9px] text-blue-500">{r.notes}</p>}
+                                            </div>
+                                            <span className="text-[10px] bg-slate-100 px-2 py-1 rounded font-bold uppercase">{r.reason}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'admin' && (
+                            <div className="space-y-6">
+                                <h2 className="font-bold text-slate-800 border-b pb-2">Panel Administrativo</h2>
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-white border rounded-3xl shadow-sm">
+                                        <p className="text-xs font-bold text-slate-400 mb-3 uppercase">Base Alumnado (RegAlum.pdf)</p>
+                                        <input type="file" className="text-xs w-full" onChange={handleUploadStudents} />
+                                    </div>
+                                    <div className="p-4 bg-white border rounded-3xl shadow-sm">
+                                        <p className="text-xs font-bold text-slate-400 mb-3 uppercase">Base Profesorado (IdEA / DNI)</p>
+                                        <input type="file" className="text-xs w-full" onChange={handleUploadTeachers} />
+                                    </div>
+                                    <div className="p-4 bg-white border rounded-3xl shadow-sm">
+                                        <p className="text-xs font-bold text-slate-400 mb-3 uppercase">Horarios GHC (HTML / CSV)</p>
+                                        <input type="file" className="text-xs w-full" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {activeCallStudent && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+                                <div className="flex justify-between items-start mb-4">
+                                    <h3 className="font-bold text-lg">Llamar a {activeCallStudent.name}</h3>
+                                    <button onClick={() => setActiveCallStudent(null)}><X /></button>
+                                </div>
+                                <div className="space-y-2 mb-4">
+                                    {[
+                                        { label: "Personal", num: activeCallStudent.tlf },
+                                        { label: "Urgencia", num: activeCallStudent.tlfUrgencia },
+                                        { label: "Tutor 1", num: activeCallStudent.tlf1Tutor },
+                                        { label: "Tutor 2", num: activeCallStudent.tlf2Tutor }
+                                    ].filter(x => x.num && x.num.trim() !== "").map((p, i) => (
+                                        <a key={i} href={`tel:${p.num}`} className="flex items-center justify-between p-4 bg-emerald-50 text-emerald-800 rounded-2xl border hover:bg-emerald-100">
+                                            <span className="text-[10px] font-bold uppercase">{p.label}</span>
+                                            <span className="font-mono font-bold">{p.num}</span>
+                                            <Phone size={18} />
+                                        </a>
+                                    ))}
+                                </div>
+                                <textarea className="w-full p-3 bg-slate-100 rounded-2xl text-sm mb-4 outline-none" placeholder="Notas de la llamada..." value={notesInput} onChange={(e) => setNotesInput(e.target.value)} />
+                                <button onClick={() => registerBreak(activeCallStudent.id, "Llamada", notesInput)} className="w-full bg-blue-800 text-white font-bold py-4 rounded-2xl shadow-lg">Guardar Registro Llamada</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeOtherStudent && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-bold">Indicar Motivo</h3>
+                                    <button onClick={() => setActiveOtherStudent(null)}><X /></button>
+                                </div>
+                                <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl text-sm mb-4 border focus:border-blue-500" placeholder="Ej: Jefatura, Conserjería..." value={notesInput} onChange={(e) => setNotesInput(e.target.value)} />
+                                <button onClick={() => registerBreak(activeOtherStudent.id, "Otros", notesInput)} className="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl">Confirmar Salida</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
         }
 
-        if (window.FirebaseAPI) { initReactApp(); } 
-        else { window.addEventListener('firebaseReady', initReactApp); }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
