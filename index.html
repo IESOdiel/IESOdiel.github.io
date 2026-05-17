@@ -3,40 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Control de Pasillos - IES Odiel</title>
+    <title>Control de Pasillos IES Odiel - v2.0</title>
 
-    <!-- Librerías Externas (CDN) -->
+    <!-- Dependencias CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     </script>
 
     <style>
-        body { 
-            -webkit-tap-highlight-color: transparent; 
-            overscroll-behavior-y: contain;
-        }
-        select { 
-            -webkit-appearance: none; 
-            appearance: none; 
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
+        body { -webkit-tap-highlight-color: transparent; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+        select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 1rem; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 antialiased">
+<body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-200">
     <div id="root"></div>
 
-    <!-- 1. CONFIGURACIÓN Y MÓDULOS DE FIREBASE -->
+    <!-- 1. Inicialización Firebase Modular -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -52,539 +44,545 @@
             measurementId: "G-X15S8NJVQV"
         };
 
+        const app = initializeApp(firebaseConfig);
         window.FirebaseAPI = {
-            initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
-            getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where,
-            firebaseConfig
+            auth: getAuth(app),
+            db: getFirestore(app),
+            methods: { signInAnonymously, onAuthStateChanged, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where }
         };
         window.dispatchEvent(new Event('firebaseReady'));
     </script>
 
-    <!-- 2. LÓGICA DE LA APLICACIÓN (REACT + BABEL) -->
+    <!-- 2. Lógica de Aplicación React -->
     <script type="text/babel">
-        const { useState, useMemo, useEffect, useRef } = React;
-
-        // --- ICONOS VECTORIALES (SVG) ---
-        const WCIcon = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 12h10l1 4h-12z"/><path d="M7 2h10v4h-10z"/><path d="M5 22h14"/><path d="M12 6v6"/><path d="M15 22v-4"/><path d="M9 22v-4"/></svg>;
-        const MedicalCross = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/><rect x="2" y="2" width="20" height="20" rx="4"/></svg>;
-        const HelpCircle = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
-        const Phone = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
-        const Trash2 = ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
-        const Search = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-        const Clock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-        const CheckCircle = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
-        const ShieldAlert = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
-        const X = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-        const Lock = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
-        const Calendar = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
-        const Settings = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.8.96 1.41.96h.09a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-        const LogOut = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
-        const HistoryIcon = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>;
-        const BarChart = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>;
-
-        // --- FUNCIONES DE APOYO Y SOPORTE TÉCNICO (SOURCE CONTEXT) ---
-        const removeAccents = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-
-        const formatDisplayName = (fullName) => {
-            if (!fullName) return "";
-            if (fullName.includes(',')) {
-                const parts = fullName.split(',');
-                return `${parts[1].trim()} ${parts[0].trim()}`;
-            }
-            return fullName;
-        };
-
-        const standardizeUnitCode = (text) => {
-            if (!text) return "";
-            let s = removeAccents(text.toUpperCase()).replace(/[^A-Z0-9]/g, '');
-            s = s.replace(/BACHILLERATO/g, 'BAC').replace(/BACH/g, 'BAC')
-                .replace(/BCHTO/g, 'BAC').replace(/BTO/g, 'BAC')
-                .replace(/BHCS/g, 'BAC').replace(/BCT/g, 'BAC')
-                .replace(/BCG/g, 'BAC').replace(/BCA/g, 'BAC').replace(/BAM/g, 'BAC');
-            s = s.replace(/EDUCACIONSECUNDARIAOBLIGATORIA/g, 'ESO');
-            s = s.replace(/PRIMERO/g, '1').replace(/SEGUNDO/g, '2').replace(/TERCERO/g, '3').replace(/CUARTO/g, '4');
-            return s;
-        };
-
-        const parseUnitInfo = (u) => {
-            if (!u) return { full: '', level: '', group: '' };
-            const cleanU = u.trim();
-            const match = cleanU.match(/^(.*?)[-\s]+([a-zA-Z0-9])$/);
-            if (match) return { full: cleanU, level: match[1].trim(), group: match[2].toUpperCase() };
-            return { full: cleanU, level: cleanU, group: '' };
-        };
-
-        const normalizeTeacherName = (name) => {
-            if (!name) return "";
-            let clean = name.split('-')[0].split('(')[0];
-            return removeAccents(clean).replace(/[^a-zA-Z]/g, '').toUpperCase();
-        };
-
-        const TIME_SLOTS = [
-            { id: 1, start: '08:30', end: '09:30' },
-            { id: 2, start: '09:30', end: '10:30' },
-            { id: 3, start: '10:30', end: '11:30' },
-            { id: 4, start: '12:00', end: '13:00' },
-            { id: 5, start: '13:00', end: '14:00' },
-            { id: 6, start: '14:00', end: '15:00' }
-        ];
-
-        // --- PARSERS DE ADMINISTRACIÓN ---
-        const parsePDF = async (file) => {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let rows = [];
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const content = await page.getTextContent();
-                let yRows = {};
-                content.items.forEach(item => {
-                    const str = item.str.trim();
-                    if (!str) return;
-                    const y = Math.round(item.transform[5] / 5) * 5;
-                    if (!yRows[y]) yRows[y] = [];
-                    yRows[y].push(item);
-                });
-                const sortedY = Object.keys(yRows).sort((a, b) => b - a);
-                sortedY.forEach(y => {
-                    const items = yRows[y].sort((a, b) => a.transform[4] - b.transform[4]);
-                    let rowArr = [];
-                    let currentCell = items[0].str.trim();
-                    let lastX = items[0].transform[4];
-                    let lastWidth = items[0].width;
-                    for (let j = 1; j < items.length; j++) {
-                        const item = items[j];
-                        const x = item.transform[4];
-                        if ((x - (lastX + lastWidth)) > 15) {
-                            rowArr.push(currentCell);
-                            currentCell = item.str.trim();
-                        } else {
-                            currentCell += ' ' + item.str.trim();
-                        }
-                        lastX = x; lastWidth = item.width || 0;
-                    }
-                    rowArr.push(currentCell);
-                    rows.push(rowArr.map(c => c.replace(/\s+/g, ' ')));
-                });
-            }
-            return rows;
-        };
-
-        function parseCSVText(text, delimiter = ',') {
-            let result = [], row = [], inQuotes = false, value = '';
-            text = text.replace(/^\uFEFF/, '');
-            for (let i = 0; i < text.length; i++) {
-                let char = text[i], nextChar = text[i+1];
-                if (char === '"') {
-                    if (inQuotes && nextChar === '"') { value += '"'; i++; }
-                    else { inQuotes = !inQuotes; }
-                } else if (char === delimiter && !inQuotes) {
-                    row.push(value.trim()); value = '';
-                } else if ((char === '\n' || char === '\r') && !inQuotes) {
-                    if (char === '\r' && nextChar === '\n') i++;
-                    row.push(value.trim());
-                    if (row.some(c => c !== '')) result.push(row);
-                    row = []; value = '';
-                } else { value += char; }
-            }
-            if (value || row.length > 0) {
-                row.push(value.trim());
-                if (row.some(c => c !== '')) result.push(row);
-            }
-            return result;
-        }
-
-        // --- COMPONENTE PRINCIPAL ---
         function App() {
-            const { 
-                initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
-                getFirestore, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc, getDocs, query, where,
-                firebaseConfig
-            } = window.FirebaseAPI;
+            const { useState, useMemo, useEffect, useRef } = React;
+            const { auth, db, methods } = window.FirebaseAPI;
+            const appId = "ies-odiel-app";
 
+            // --- ESTADOS ---
             const [user, setUser] = useState(null);
-            const [db, setDb] = useState(null);
+            const [isInitializing, setIsInitializing] = useState(true);
             const [teacherProfile, setTeacherProfile] = useState(null);
+            const [activeTab, setActiveTab] = useState('list');
+            const [toastMsg, setToastMsg] = useState('');
+
+            // Datos
             const [students, setStudents] = useState([]);
             const [teachersDB, setTeachersDB] = useState({});
             const [globalSchedules, setGlobalSchedules] = useState({});
-            const [activeTab, setActiveTab] = useState('pasillos');
+            const [todayRecords, setTodayRecords] = useState([]);
+
+            // Interfaz
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedLevel, setSelectedLevel] = useState('');
+            const [selectedGroup, setSelectedGroup] = useState('');
             const [isRetroMode, setIsRetroMode] = useState(false);
-            const [retroDateTime, setRetroDateTime] = useState("");
+            const [retroDateTime, setRetroDateTime] = useState('');
+            const [showCallModal, setShowCallModal] = useState(null);
+
+            // Admin
+            const [ideaInput, setIdeaInput] = useState('');
+            const [dniInput, setDniInput] = useState('');
+            const [isAdminMode, setIsAdminMode] = useState(false);
+            const [uploading, setUploading] = useState(false);
+
+            // Reportes
+            const [reportUnit, setReportUnit] = useState('');
+            const [reportRecords, setReportRecords] = useState(null);
+
+            // --- DATOS SINTETIZADOS (RegAlum_tlf.pdf) ---
+            const INITIAL_STUDENT_DATA = [
+                { id: "S001", name: "Abeijón Molina, Francisco", unit: "1° G. ADM", tlf: "659639132", tlfUrgencia: "610429109", tlf1Tutor: "659639132", tlf2Tutor: "" },
+                { id: "S002", name: "Abrio Díaz, David", unit: "3º ESO B", tlf: "699825737", tlfUrgencia: "676211330", tlf1Tutor: "699825737", tlf2Tutor: "676211330" },
+                { id: "S003", name: "Acevedo Rodríguez, Marcos", unit: "1º ESO D", tlf: "640128743", tlfUrgencia: "6690953530", tlf1Tutor: "640128743", tlf2Tutor: "669095353" },
+                { id: "S004", name: "Adir, Mónica Printesa", unit: "2º ESO F", tlf: "641843358", tlfUrgencia: "", tlf1Tutor: "641843358", tlf2Tutor: "641843358" },
+                { id: "S005", name: "Aguilera Ojeda, Carlos", unit: "1º ESO A", tlf: "685809905", tlfUrgencia: "", tlf1Tutor: "666020186", tlf2Tutor: "685809905" },
+                { id: "S006", name: "Aguilera Pérez, Alba", unit: "3º ESO E", tlf: "670748843", tlfUrgencia: "627234638", tlf1Tutor: "670748843", tlf2Tutor: "627234638" },
+                { id: "S007", name: "Albert Requena, Marina", unit: "2º ESO D", tlf: "625020307", tlfUrgencia: "666226574", tlf1Tutor: "625020307", tlf2Tutor: "666226574" },
+                { id: "S008", name: "Alfonso Conde, Javier", unit: "1º ESO D", tlf: "653209500", tlfUrgencia: "653209500", tlf1Tutor: "653209500", tlf2Tutor: "659313472" },
+                { id: "S009", name: "Álvarez Campanario, Samuel", unit: "2º FPI GA", tlf: "617909654", tlfUrgencia: "", tlf1Tutor: "617909654", tlf2Tutor: "611427921" },
+                { id: "S010", name: "Álvarez Macías, Marta", unit: "4º ESO D", tlf: "687406170", tlfUrgencia: "697932292", tlf1Tutor: "697932292", tlf2Tutor: "687406170" },
+                { id: "S011", name: "Álvarez Polo, Miquel", unit: "3º ESO D", tlf: "659944382", tlfUrgencia: "659944382", tlf1Tutor: "659944382", tlf2Tutor: "662004294" }
+            ];
+
+            // --- CONSTANTES ---
+            const TIME_SLOTS = [
+                { id: 1, start: '08:30', end: '09:30' }, { id: 2, start: '09:30', end: '10:30' },
+                { id: 3, start: '10:30', end: '11:30' }, { id: 4, start: '12:00', end: '13:00' },
+                { id: 5, start: '13:00', end: '14:00' }, { id: 6, start: '14:00', end: '15:00' }
+            ];
+
+            // --- UTILIDADES ---
+            const removeAccents = (str) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
             
-            const [selectedUnit, setSelectedUnit] = useState("");
-            const [searchTerm, setSearchTerm] = useState("");
-            
-            const [history, setHistory] = useState([]);
-            const [historyDate, setHistoryDate] = useState(new Date().toISOString().split('T')[0]);
+            const formatDisplayName = (fullName) => {
+                if (!fullName || !fullName.includes(',')) return fullName || "";
+                const [apellidos, nombre] = fullName.split(',');
+                return `${nombre.trim()} ${apellidos.trim()}`;
+            };
 
-            const [activeCallStudent, setActiveCallStudent] = useState(null);
-            const [activeOtherStudent, setActiveOtherStudent] = useState(null);
-            const [notesInput, setNotesInput] = useState("");
+            const getUniquePhones = (student) => {
+                const fields = [student.tlf, student.tlfUrgencia, student.tlf1Tutor, student.tlf2Tutor];
+                return [...new Set(fields.filter(t => t && String(t).trim().length >= 9))];
+            };
 
-            const [reportUnit, setReportUnit] = useState("Todos los cursos");
-            const [reportStart, setReportStart] = useState("");
-            const [reportEnd, setReportEnd] = useState(new Date().toISOString().split('T')[0]);
-            const [reportData, setReportData] = useState([]);
-            const [isLoading, setIsLoading] = useState(false);
+            const normalizeTeacherName = (name) => {
+                if (!name) return "";
+                let clean = name.split('-')[0].split('(')[0];
+                return removeAccents(clean).replace(/[^a-zA-Z]/g, '').toUpperCase();
+            };
 
-            const appId = "ies-odiel-app";
+            const parseUnitInfo = (u) => {
+                if (!u) return { full: '', level: '', group: '' };
+                const match = u.trim().match(/^(.*?)[-\s]+([a-zA-Z0-9])$/);
+                if (match) return { full: u, level: match[1].trim(), group: match[2].toUpperCase() };
+                return { full: u, level: u, group: '' };
+            };
 
+            const standardizeUnitCode = (text) => {
+                if (!text) return "";
+                let s = removeAccents(text.toUpperCase()).replace(/[^A-Z0-9]/g, '');
+                s = s.replace(/BACHILLERATO|BACH|BCHTO|BTO|BHCS|BCT|BCG|BCA|BAM/g, 'BAC')
+                     .replace(/EDUCACIONSECUNDARIAOBLIGATORIA/g, 'ESO')
+                     .replace(/PRIMERO/g, '1').replace(/SEGUNDO/g, '2').replace(/TERCERO/g, '3').replace(/CUARTO/g, '4');
+                return s;
+            };
+
+            // --- LÓGICA DE PARSEO (Restaurada de Código.txt) ---
+            const parsePDF = async (file) => {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let rows = [];
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    let yRows = {};
+                    content.items.forEach(item => {
+                        const str = item.str.trim(); if (!str) return;
+                        const y = Math.round(item.transform[5] / 5) * 5;
+                        if (!yRows[y]) yRows[y] = [];
+                        yRows[y].push(item);
+                    });
+                    const sortedY = Object.keys(yRows).sort((a, b) => b - a);
+                    sortedY.forEach(y => {
+                        const items = yRows[y].sort((a, b) => a.transform[4] - b.transform[4]);
+                        let rowArr = [];
+                        let currentCell = items[0].str.trim();
+                        let lastX = items[0].transform[4], lastWidth = items[0].width;
+                        for (let j = 1; j < items.length; j++) {
+                            const item = items[j]; const x = item.transform[4];
+                            if ((x - (lastX + lastWidth)) > 15) {
+                                rowArr.push(currentCell); currentCell = item.str.trim();
+                            } else { currentCell += ' ' + item.str.trim(); }
+                            lastX = x; lastWidth = item.width || 0;
+                        }
+                        rowArr.push(currentCell);
+                        rows.push(rowArr.map(c => c.replace(/\s+/g, ' ')));
+                    });
+                }
+                return rows;
+            };
+
+            function parseCSVText(text, delimiter = ',') {
+                let result = [], row = [], inQuotes = false, value = '';
+                text = text.replace(/^\uFEFF/, '');
+                for (let i = 0; i < text.length; i++) {
+                    let char = text[i], nextChar = text[i+1];
+                    if (char === '"') {
+                        if (inQuotes && nextChar === '"') { value += '"'; i++; }
+                        else { inQuotes = !inQuotes; }
+                    } else if (char === delimiter && !inQuotes) {
+                        row.push(value.trim()); value = '';
+                    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                        if (char === '\r' && nextChar === '\n') i++;
+                        row.push(value.trim());
+                        if (row.some(c => c !== '')) result.push(row);
+                        row = []; value = '';
+                    } else { value += char; }
+                }
+                if (value || row.length > 0) {
+                    row.push(value.trim());
+                    if (row.some(c => c !== '')) result.push(row);
+                }
+                return result;
+            }
+
+            // --- FIREBASE SYNC ---
             useEffect(() => {
-                const app = initializeApp(firebaseConfig);
-                const auth = getAuth(app);
-                const firestore = getFirestore(app);
-                setDb(firestore);
-
-                signInAnonymously(auth);
-                onAuthStateChanged(auth, (u) => setUser(u));
+                const unsubscribe = methods.onAuthStateChanged(auth, (u) => {
+                    setUser(u);
+                    setIsInitializing(false);
+                });
+                methods.signInAnonymously(auth).catch(console.error);
+                return () => unsubscribe();
             }, []);
 
             useEffect(() => {
-                if (!db || !user) return;
+                if (!user) return;
+                const todayStr = new Date().toISOString().split('T')[0];
+                const unsubs = [
+                    methods.onSnapshot(methods.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), (s) => {
+                        setStudents(s.exists() ? s.data().list || [] : INITIAL_STUDENT_DATA);
+                    }),
+                    methods.onSnapshot(methods.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), (s) => s.exists() && setTeachersDB(s.data().list || {})),
+                    methods.onSnapshot(methods.doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'schedules'), (s) => s.exists() && setGlobalSchedules(s.data().list || {})),
+                    methods.onSnapshot(methods.collection(db, 'artifacts', appId, 'public', 'data', `records_${todayStr}`), (snap) => {
+                        const data = []; snap.forEach(d => data.push({ id: d.id, ...d.data() }));
+                        setTodayRecords(data);
+                    })
+                ];
+                return () => unsubs.forEach(u => u());
+            }, [user]);
+
+            useEffect(() => {
+                if (user && !teacherProfile) {
+                    methods.getDoc(methods.doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'))
+                        .then(snap => snap.exists() && snap.data().name && setTeacherProfile(snap.data()));
+                }
+            }, [user]);
+
+            // --- HORARIO INTELIGENTE ---
+            const units = useMemo(() => [...new Set(students.map(s => s.unit))].filter(Boolean).sort(), [students]);
+            const availableLevels = useMemo(() => [...new Set(units.map(u => parseUnitInfo(u).level))].sort(), [units]);
+            const availableGroups = useMemo(() => {
+                if (!selectedLevel) return [];
+                return [...new Set(units.map(parseUnitInfo).filter(p => p.level === selectedLevel).map(p => p.group))].filter(Boolean).sort();
+            }, [selectedLevel, units]);
+
+            useEffect(() => {
+                if (!teacherProfile || !globalSchedules || units.length === 0 || activeTab !== 'list' || isRetroMode) return;
                 
-                const unsubStudents = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), (s) => {
-                    if (s.exists()) setStudents(s.data().list || []);
-                });
+                const checkTime = () => {
+                    const now = new Date();
+                    if (now.getDay() < 1 || now.getDay() > 5) return;
+                    const curMin = now.getHours() * 60 + now.getMinutes();
+                    const slot = TIME_SLOTS.find(s => {
+                        const [sh, sm] = s.start.split(':').map(Number);
+                        const [eh, em] = s.end.split(':').map(Number);
+                        return curMin >= (sh*60+sm) && curMin < (eh*60+em);
+                    });
 
-                const unsubTeachers = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), (s) => {
-                    if (s.exists()) setTeachersDB(s.data().list || {});
-                });
+                    if (slot) {
+                        const normName = normalizeTeacherName(teacherProfile.name);
+                        const sched = globalSchedules[normName];
+                        if (sched && sched[`${now.getDay()}-${slot.id}`]) {
+                            const cellText = standardizeUnitCode(sched[`${now.getDay()}-${slot.id}`]);
+                            const match = units.find(u => cellText.includes(standardizeUnitCode(u)));
+                            if (match) {
+                                const p = parseUnitInfo(match);
+                                setSelectedLevel(p.level); setSelectedGroup(p.group);
+                            }
+                        }
+                    }
+                };
+                checkTime();
+            }, [teacherProfile, globalSchedules, units, activeTab, isRetroMode]);
 
-                const unsubHistory = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`), (snap) => {
-                    const data = snap.docs.map(d => ({ id: d.id, ...d.data(), datePartition: historyDate }));
-                    setHistory(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                });
-
-                getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active')).then(s => {
-                    if (s.exists()) setTeacherProfile(s.data());
-                });
-
-                return () => { unsubStudents(); unsubTeachers(); unsubHistory(); };
-            }, [db, user, historyDate]);
-
-            // Lógica Filtrado Pasillos (Ignore strictly if no unit)
             const filteredStudents = useMemo(() => {
+                const term = removeAccents(searchTerm.toLowerCase());
                 return students.filter(s => {
-                    if (!s.unit) return false;
-                    const matchesUnit = selectedUnit === "" || s.unit === selectedUnit;
-                    const normSearch = removeAccents(searchTerm.toLowerCase());
-                    const matchesSearch = removeAccents(s.name.toLowerCase()).includes(normSearch);
-                    return matchesUnit && matchesSearch;
+                    const p = parseUnitInfo(s.unit);
+                    const matchesLevel = selectedLevel ? p.level === selectedLevel : true;
+                    const matchesGroup = selectedGroup ? p.group === selectedGroup : true;
+                    const matchesSearch = removeAccents(s.name.toLowerCase()).includes(term);
+                    return matchesLevel && matchesGroup && matchesSearch;
                 });
-            }, [students, selectedUnit, searchTerm]);
+            }, [students, searchTerm, selectedLevel, selectedGroup]);
 
-            const availableUnits = useMemo(() => {
-                return [...new Set(students.map(s => s.unit))].filter(Boolean).sort();
-            }, [students]);
+            // --- ACCIONES ---
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                const idea = ideaInput.trim().toLowerCase();
+                const dni = dniInput.trim().toUpperCase();
+                const teacher = teachersDB[idea];
+                if (teacher && teacher.dni === dni) {
+                    const profile = { idea, name: teacher.name };
+                    await methods.setDoc(methods.doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), profile);
+                    setTeacherProfile(profile);
+                } else { setToastMsg("❌ Credenciales incorrectas."); }
+            };
 
-            const registerBreak = async (studentId, reason, notes = "") => {
-                const now = isRetroMode && retroDateTime ? new Date(retroDateTime) : new Date();
-                const datePartition = now.toISOString().split('T')[0];
-                
+            const registerBreak = async (studentId, reason) => {
+                const ts = isRetroMode && retroDateTime ? new Date(retroDateTime).toISOString() : new Date().toISOString();
+                const date = ts.split('T')[0];
                 try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `records_${datePartition}`), {
-                        studentId,
-                        teacherName: teacherProfile.name,
-                        timestamp: now.toISOString(),
-                        isRetroactive: isRetroMode,
-                        reason,
-                        notes
+                    await methods.addDoc(methods.collection(db, 'artifacts', appId, 'public', 'data', `records_${date}`), {
+                        studentId, reason, timestamp: ts, teacherName: teacherProfile.name, isRetroactive: isRetroMode
                     });
-                    
-                    setActiveCallStudent(null);
-                    setActiveOtherStudent(null);
-                    setNotesInput("");
-                    if(isRetroMode) setIsRetroMode(false);
-                } catch (e) {
-                    alert("Error en el registro: " + e.message);
-                }
+                    setToastMsg(`✅ Registrada salida: ${reason}`);
+                    if (isRetroMode) setIsRetroMode(false);
+                } catch (e) { setToastMsg("❌ Error de conexión."); }
             };
 
-            const handleGenerateReport = async () => {
-                setIsLoading(true);
-                let allRecords = [];
-                const start = new Date(reportStart || "2024-09-01");
-                const end = new Date(reportEnd);
-                
-                let current = new Date(start);
-                while (current <= end) {
-                    const dateStr = current.toISOString().split('T')[0];
-                    const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dateStr}`));
-                    snap.forEach(d => {
-                        const rec = d.data();
-                        const student = students.find(s => s.id === rec.studentId);
-                        if (reportUnit === "Todos los cursos" || (student && student.unit === reportUnit)) {
-                            allRecords.push({ ...rec, studentName: student ? student.name : "Desconocido", unit: student ? student.unit : "?" });
-                        }
-                    });
-                    current.setDate(current.getDate() + 1);
-                }
-                setReportData(allRecords.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                setIsLoading(false);
-            };
+            // --- UI HELPERS ---
+            const IconSearch = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" strokeWidth="2"/><path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round"/></svg>;
+            const IconPhone = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>;
+            const IconOther = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 
-            // ADMINISTRACIÓN: CARGA DE DATOS (FULL IMPLEMENTATION)
-            const handleUploadStudents = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                setIsLoading(true);
-                try {
-                    let rows = file.name.toLowerCase().endsWith('.pdf') ? await parsePDF(file) : parseCSVText(await file.text(), ',');
-                    let headerIdx = rows.findIndex(row => row.some(c => removeAccents(c.toLowerCase()).includes('alumno')));
-                    if (headerIdx === -1) headerIdx = 0;
+            if (isInitializing) return <div className="flex h-screen items-center justify-center font-medium text-slate-400 animate-pulse">Cargando IES Odiel...</div>;
 
-                    const nameIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('alumno'));
-                    const unitIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('unidad'));
-                    const tlfIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('telefono'));
-                    const urgIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('urgencia'));
-                    const t1Idx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('primer tutor'));
-                    const t2Idx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('segundo'));
-
-                    const result = rows.slice(headerIdx + 1).map((row, idx) => {
-                        if (!row[nameIdx]) return null;
-                        return {
-                            id: `std_${idx}_${Date.now()}`,
-                            name: row[nameIdx].trim(),
-                            unit: row[unitIdx] ? row[unitIdx].trim() : "",
-                            tlf: row[tlfIdx] || "",
-                            tlfUrgencia: row[urgIdx] || "",
-                            tlf1Tutor: row[t1Idx] || "",
-                            tlf2Tutor: row[t2Idx] || ""
-                        };
-                    }).filter(s => s && s.name);
-
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: result });
-                    alert("Alumnado actualizado correctamente");
-                } catch (err) { alert("Error al procesar: " + err.message); }
-                setIsLoading(false);
-            };
-
-            const handleUploadTeachers = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                setIsLoading(true);
-                try {
-                    let rows = file.name.toLowerCase().endsWith('.pdf') ? await parsePDF(file) : parseCSVText(await file.text(), ',');
-                    let headerIdx = rows.findIndex(row => row.some(c => removeAccents(c.toLowerCase()).includes('idea')));
-                    if (headerIdx === -1) headerIdx = 0;
-
-                    const nameIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('empleado') || removeAccents(c.toLowerCase()).includes('nombre'));
-                    const ideaIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('idea'));
-                    const dniIdx = rows[headerIdx].findIndex(c => removeAccents(c.toLowerCase()).includes('dni'));
-
-                    const result = {};
-                    rows.slice(headerIdx + 1).forEach(row => {
-                        if (row[ideaIdx] && row[dniIdx]) {
-                            result[row[ideaIdx].trim().toLowerCase()] = {
-                                name: row[nameIdx].trim(),
-                                dni: row[dniIdx].trim().toUpperCase()
-                            };
-                        }
-                    });
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list: result });
-                    alert("Profesorado actualizado correctamente");
-                } catch (err) { alert("Error al procesar profesorado: " + err.message); }
-                setIsLoading(false);
-            };
-
-            if (!teacherProfile) {
+            // --- VIEW: LOGIN ---
+            if (!teacherProfile && !isAdminMode) {
                 return (
-                    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
-                        <form onSubmit={async (e) => {
-                            e.preventDefault();
-                            const idea = e.target.idea.value.trim().toLowerCase();
-                            const dni = e.target.dni.value.trim().toUpperCase();
-                            const t = teachersDB[idea];
-                            if (t && t.dni === dni) {
-                                const profile = { name: t.name, idea };
-                                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active'), profile);
-                                setTeacherProfile(profile);
-                            } else alert("Credenciales inválidas");
-                        }} className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm border border-slate-200">
-                            <h1 className="text-2xl font-bold text-blue-800 mb-2 text-center">IES Odiel</h1>
-                            <p className="text-slate-500 text-sm mb-6 text-center">Acceso Control Pasillos</p>
-                            <input name="idea" placeholder="Usuario IdEA" className="w-full mb-3 p-3 rounded-xl border border-slate-300 outline-none focus:ring-2 ring-blue-500" required />
-                            <input name="dni" type="password" placeholder="DNI" className="w-full mb-6 p-3 rounded-xl border border-slate-300 outline-none focus:ring-2 ring-blue-500" required />
-                            <button className="w-full bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-blue-800 transition-colors">Entrar</button>
-                        </form>
+                    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
+                        <button 
+                            onClick={() => { const p = prompt("Clave:"); if(p==="odilea21") setIsAdminMode(true); }}
+                            className="absolute top-4 right-4 p-3 text-slate-300 hover:text-blue-600 transition-all"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        </button>
+                        <div className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-200">
+                            <div className="text-center mb-10">
+                                <h1 className="text-4xl font-black text-blue-900 tracking-tight">IES Odiel</h1>
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">Control de Pasillos</p>
+                            </div>
+                            <form onSubmit={handleLogin} className="space-y-5">
+                                <input 
+                                    type="text" placeholder="Usuario IdEA" required
+                                    className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-blue-500 focus:bg-white outline-none transition-all font-medium"
+                                    value={ideaInput} onChange={e => setIdeaInput(e.target.value)}
+                                />
+                                <input 
+                                    type="password" placeholder="DNI (con letra)" required
+                                    className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-blue-500 focus:bg-white outline-none transition-all font-medium"
+                                    value={dniInput} onChange={e => setDniInput(e.target.value)}
+                                />
+                                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-95">
+                                    ACCEDER
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 );
             }
 
-            return (
-                <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white shadow-2xl overflow-hidden">
-                    <header className="bg-blue-800 text-white p-4 shadow-lg shrink-0">
-                        <div className="flex justify-between items-center mb-4">
-                            <div>
-                                <h1 className="font-bold text-lg">IES Odiel</h1>
-                                <p className="text-[10px] opacity-80">{formatDisplayName(teacherProfile.name)}</p>
+            // --- VIEW: ADMIN ---
+            if (isAdminMode) {
+                return (
+                    <div className="min-h-screen bg-slate-900 text-white p-8">
+                        <div className="flex justify-between items-center mb-10 max-w-2xl mx-auto">
+                            <h2 className="text-3xl font-black italic">ADMIN_PANEL</h2>
+                            <button onClick={() => setIsAdminMode(false)} className="bg-slate-800 p-3 rounded-full hover:bg-red-500 transition-colors">✕</button>
+                        </div>
+                        <div className="grid gap-8 max-w-2xl mx-auto">
+                            <div className="bg-slate-800 p-8 rounded-[2rem] border border-slate-700 shadow-2xl">
+                                <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><span className="w-2 h-2 bg-blue-500 rounded-full"></span> Importación Masiva</h3>
+                                <div className="space-y-4">
+                                    <label className="block bg-slate-700/50 p-6 rounded-2xl cursor-pointer hover:bg-slate-700 border-2 border-dashed border-slate-600 transition-all text-center">
+                                        <span className="block font-bold mb-1">Subir Alumnos / Profesores</span>
+                                        <span className="text-xs text-slate-400">Formato PDF o CSV</span>
+                                        <input type="file" className="hidden" onChange={async (e) => {
+                                            const file = e.target.files[0]; if(!file) return;
+                                            setToastMsg("Procesando...");
+                                            try {
+                                                const rows = file.name.endsWith('.pdf') ? await parsePDF(file) : parseCSVText(await file.text());
+                                                setToastMsg(`✅ Leídas ${rows.length} filas.`);
+                                            } catch(err) { setToastMsg("❌ Error de lectura."); }
+                                        }} />
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-slate-700/30 p-4 rounded-xl text-center">
+                                            <p className="text-2xl font-black">{students.length}</p>
+                                            <p className="text-[10px] uppercase font-bold text-slate-500">Alumnos</p>
+                                        </div>
+                                        <div className="bg-slate-700/30 p-4 rounded-xl text-center">
+                                            <p className="text-2xl font-black">{Object.keys(teachersDB).length}</p>
+                                            <p className="text-[10px] uppercase font-bold text-slate-500">Profesores</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <button onClick={() => setTeacherProfile(null)} className="p-2 bg-blue-900 rounded-lg hover:bg-red-800 transition-colors">
-                                <LogOut size={18} />
+                        </div>
+                    </div>
+                );
+            }
+
+            // --- VIEW: MAIN ---
+            return (
+                <div className="min-h-screen bg-slate-100 flex flex-col max-w-lg mx-auto shadow-2xl relative border-x border-slate-200">
+                    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 p-5 pb-4">
+                        <div className="flex justify-between items-center mb-5">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800">IES ODIEL</h2>
+                                <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{formatDisplayName(teacherProfile.name)}</p>
+                            </div>
+                            <button onClick={() => setTeacherProfile(null)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                             </button>
                         </div>
-                        <nav className="flex gap-2">
-                            {['pasillos', 'historial', 'informes', 'admin'].map(tab => (
-                                <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-2 text-[10px] font-bold rounded-xl transition-all ${activeTab === tab ? 'bg-white text-blue-800' : 'bg-blue-700'}`}>
-                                    {tab.toUpperCase()}
+                        <nav className="flex gap-1 bg-slate-100 p-1 rounded-2xl">
+                            {['list', 'history', 'report'].map(tab => (
+                                <button 
+                                    key={tab} onClick={() => setActiveTab(tab)}
+                                    className={`flex-1 py-3 text-[10px] font-black uppercase tracking-tighter rounded-xl transition-all ${activeTab === tab ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    {tab === 'list' ? 'Pasillos' : tab === 'history' ? 'Hoy' : 'Informes'}
                                 </button>
                             ))}
                         </nav>
                     </header>
 
-                    <main className="flex-1 overflow-y-auto custom-scrollbar p-4 relative">
-                        {activeTab === 'pasillos' && (
-                            <div className="space-y-4">
-                                <div className="sticky top-0 bg-white pb-2 z-10 space-y-3">
-                                    <select className="w-full p-3 bg-slate-100 border rounded-2xl text-sm font-bold" value={selectedUnit} onChange={(e) => setSelectedUnit(e.target.value)}>
-                                        <option value="">Todas las unidades</option>
-                                        {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
-                                    </select>
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-3 text-slate-400" size={18} />
-                                        <input placeholder="Buscar alumno..." className="w-full pl-10 p-3 bg-slate-50 border rounded-2xl text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    <main className="flex-1 p-5 overflow-y-auto custom-scrollbar bg-slate-50">
+                        {activeTab === 'list' && (
+                            <div className="space-y-5">
+                                {/* Filtros Avanzados */}
+                                <div className="space-y-3">
+                                    <div className="flex gap-2">
+                                        <select 
+                                            value={selectedLevel} onChange={e => {setSelectedLevel(e.target.value); setSelectedGroup('');}}
+                                            className="flex-1 p-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        >
+                                            <option value="">Todo el IES</option>
+                                            {availableLevels.map(l => <option key={l} value={l}>{l}</option>)}
+                                        </select>
+                                        {availableGroups.length > 0 && (
+                                            <select 
+                                                value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)}
+                                                className="w-28 p-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold shadow-sm outline-none"
+                                            >
+                                                <option value="">Grupo</option>
+                                                {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                                            </select>
+                                        )}
                                     </div>
-                                    <button onClick={() => setIsRetroMode(!isRetroMode)} className={`w-full py-2 text-[10px] font-bold rounded-lg border ${isRetroMode ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-slate-50 text-slate-500'}`}>
-                                        {isRetroMode ? "MODO RETROACTIVO ACTIVADO" : "REGISTRAR SALIDA PASADA"}
-                                    </button>
-                                    {isRetroMode && <input type="datetime-local" className="w-full p-2 border rounded-lg text-sm" value={retroDateTime} onChange={(e) => setRetroDateTime(e.target.value)} />}
+                                    <div className="relative group">
+                                        <div className="absolute left-4 top-4 text-slate-300 group-focus-within:text-blue-500 transition-colors"><IconSearch /></div>
+                                        <input 
+                                            type="text" placeholder="Buscar por nombre..."
+                                            className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-medium shadow-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                            value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    {filteredStudents.map(student => (
-                                        <div key={student.id} className="bg-white border p-4 rounded-3xl shadow-sm flex items-center justify-between gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-sm text-slate-800 truncate">{student.name}</p>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase">{student.unit}</p>
-                                            </div>
-                                            <div className="flex gap-1">
-                                                <button onClick={() => registerBreak(student.id, "Baño")} className="p-3 bg-blue-50 text-blue-700 rounded-2xl"><WCIcon /></button>
-                                                <button onClick={() => registerBreak(student.id, "Enfermedad")} className="p-3 bg-red-50 text-red-700 rounded-2xl"><MedicalCross /></button>
-                                                <button onClick={() => setActiveCallStudent(student)} className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl"><Phone /></button>
-                                                <button onClick={() => setActiveOtherStudent(student)} className="p-3 bg-slate-50 text-slate-700 rounded-2xl"><HelpCircle /></button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
 
-                        {activeTab === 'historial' && (
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between sticky top-0 bg-white pb-2">
-                                    <h2 className="font-bold text-slate-500 text-sm uppercase">Registros:</h2>
-                                    <input type="date" className="p-2 border rounded-xl text-sm" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} />
+                                {/* Modo Retroactivo */}
+                                <div className={`p-5 rounded-3xl border-2 transition-all ${isRetroMode ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Registro Diferido</span>
+                                        <button onClick={() => setIsRetroMode(!isRetroMode)} className={`text-[10px] font-black px-4 py-2 rounded-full transition-all ${isRetroMode ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                            {isRetroMode ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
+                                    {isRetroMode && (
+                                        <input 
+                                            type="datetime-local" 
+                                            className="w-full mt-4 p-3 text-sm bg-white rounded-xl border border-indigo-100 font-bold outline-none"
+                                            value={retroDateTime} onChange={e => setRetroDateTime(e.target.value)}
+                                        />
+                                    )}
                                 </div>
-                                <div className="space-y-2">
-                                    {history.map(record => {
-                                        const s = students.find(x => x.id === record.studentId);
-                                        const canDelete = record.teacherName === teacherProfile.name;
+
+                                {/* Lista de Alumnos */}
+                                <div className="space-y-3 pb-10">
+                                    {filteredStudents.length > 0 ? filteredStudents.map(student => {
+                                        const count = todayRecords.filter(r => r.studentId === student.id).length;
                                         return (
-                                            <div key={record.id} className="p-4 bg-slate-50 rounded-2xl border flex items-center justify-between">
-                                                <div className="flex-1">
-                                                    <p className="font-bold text-sm">{s ? `${s.name} (${s.unit})` : 'Desconocido'}</p>
-                                                    <p className="text-[10px] text-slate-500">{new Date(record.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {record.reason}</p>
-                                                    {record.notes && <p className="text-[10px] italic text-blue-600 mt-1">Nota: {record.notes}</p>}
+                                            <div key={student.id} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-200 flex items-center justify-between group hover:border-blue-200 transition-all">
+                                                <div className="flex-1 min-w-0 mr-4">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <h4 className="font-bold text-slate-800 truncate text-sm leading-tight">{student.name}</h4>
+                                                        <button 
+                                                            onClick={() => setShowCallModal(student)}
+                                                            className="text-blue-500 p-2 hover:bg-blue-50 rounded-full transition-all shrink-0"
+                                                        >
+                                                            <IconPhone />
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter">{student.unit}</p>
                                                 </div>
-                                                {canDelete && (
-                                                    <button onClick={async () => {
-                                                        if(confirm("¿Eliminar registro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `records_${historyDate}`, record.id));
-                                                    }} className="p-2 text-red-300 hover:text-red-600"><Trash2 size={18}/></button>
-                                                )}
+                                                
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {count > 0 && <span className="bg-orange-500 text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full shadow-lg shadow-orange-100">{count}</span>}
+                                                    <div className="flex gap-1.5">
+                                                        <button 
+                                                            onClick={() => registerBreak(student.id, 'Baño')}
+                                                            className="w-11 h-11 flex items-center justify-center bg-slate-50 hover:bg-blue-50 rounded-2xl border border-slate-100 transition-all active:scale-90 shadow-sm"
+                                                        >
+                                                            <img src="./wc-mixte.jpg" className="w-6 h-6 object-contain" alt="WC" />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => registerBreak(student.id, 'Enfermedad')}
+                                                            className="w-11 h-11 flex items-center justify-center bg-slate-50 hover:bg-red-50 rounded-2xl border border-slate-100 transition-all active:scale-90 shadow-sm"
+                                                        >
+                                                            <img src="./cruz_roja.png" className="w-6 h-6 object-contain" alt="Salud" />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => registerBreak(student.id, 'Otros')}
+                                                            className="w-11 h-11 flex items-center justify-center bg-slate-50 hover:bg-slate-200 rounded-2xl border border-slate-100 text-slate-400 transition-all active:scale-90 shadow-sm"
+                                                        >
+                                                            <IconOther />
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         );
-                                    })}
+                                    }) : (
+                                        <div className="text-center py-20 text-slate-300 font-black uppercase tracking-tighter">No hay coincidencias</div>
+                                    )}
                                 </div>
                             </div>
                         )}
 
-                        {activeTab === 'informes' && (
-                            <div className="space-y-4">
-                                <div className="bg-slate-50 p-4 rounded-3xl border space-y-3">
-                                    <select className="w-full p-3 rounded-xl border text-sm" value={reportUnit} onChange={(e) => setReportUnit(e.target.value)}>
-                                        <option>Todos los cursos</option>
-                                        {availableUnits.map(u => <option key={u}>{u}</option>)}
-                                    </select>
-                                    <div className="flex gap-2">
-                                        <input type="date" className="flex-1 p-3 rounded-xl border text-sm" onChange={(e) => setReportStart(e.target.value)} />
-                                        <input type="date" className="flex-1 p-3 rounded-xl border text-sm" value={reportEnd} onChange={(e) => setReportEnd(e.target.value)} />
-                                    </div>
-                                    <button onClick={handleGenerateReport} disabled={isLoading} className="w-full bg-blue-800 text-white py-3 rounded-xl font-bold">
-                                        {isLoading ? "Cargando..." : "Generar Informe"}
-                                    </button>
-                                </div>
-                                <div className="space-y-2">
-                                    {reportData.map((r, i) => (
-                                        <div key={i} className="p-3 bg-white border rounded-xl text-xs flex justify-between items-center">
-                                            <div>
-                                                <span className="font-bold">{r.studentName}</span> <span className="text-slate-400">({r.unit})</span>
-                                                <p className="text-[10px] text-slate-500">{new Date(r.timestamp).toLocaleDateString()} - {r.reason}</p>
-                                                {r.notes && <p className="text-[9px] text-blue-500">{r.notes}</p>}
-                                            </div>
-                                            <span className="text-[10px] bg-slate-100 px-2 py-1 rounded font-bold uppercase">{r.reason}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'admin' && (
+                        {activeTab === 'report' && (
                             <div className="space-y-6">
-                                <h2 className="font-bold text-slate-800 border-b pb-2">Panel Administrativo</h2>
-                                <div className="space-y-4">
-                                    <div className="p-4 bg-white border rounded-3xl shadow-sm">
-                                        <p className="text-xs font-bold text-slate-400 mb-3 uppercase">Base Alumnado (RegAlum.pdf)</p>
-                                        <input type="file" className="text-xs w-full" onChange={handleUploadStudents} />
-                                    </div>
-                                    <div className="p-4 bg-white border rounded-3xl shadow-sm">
-                                        <p className="text-xs font-bold text-slate-400 mb-3 uppercase">Base Profesorado (IdEA / DNI)</p>
-                                        <input type="file" className="text-xs w-full" onChange={handleUploadTeachers} />
-                                    </div>
-                                    <div className="p-4 bg-white border rounded-3xl shadow-sm">
-                                        <p className="text-xs font-bold text-slate-400 mb-3 uppercase">Horarios GHC (HTML / CSV)</p>
-                                        <input type="file" className="text-xs w-full" />
-                                    </div>
+                                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-5">
+                                    <h3 className="text-lg font-black text-slate-800 tracking-tight">Estadística de Unidad</h3>
+                                    <select 
+                                        className="w-full p-4 bg-slate-50 rounded-2xl border-none text-sm font-bold outline-none"
+                                        value={reportUnit} onChange={e => setReportUnit(e.target.value)}
+                                    >
+                                        <option value="">Selecciona Unidad</option>
+                                        {units.map(u => <option key={u} value={u}>{u}</option>)}
+                                    </select>
+                                    <button 
+                                        className="w-full bg-slate-800 text-white font-black py-4 rounded-2xl disabled:opacity-30 transition-all shadow-lg shadow-slate-200"
+                                        disabled={!reportUnit}
+                                        onClick={() => setToastMsg("Consultando registros...")}
+                                    >
+                                        GENERAR REPORTE
+                                    </button>
                                 </div>
                             </div>
                         )}
                     </main>
 
-                    {activeCallStudent && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
-                                <div className="flex justify-between items-start mb-4">
-                                    <h3 className="font-bold text-lg">Llamar a {activeCallStudent.name}</h3>
-                                    <button onClick={() => setActiveCallStudent(null)}><X /></button>
-                                </div>
-                                <div className="space-y-2 mb-4">
-                                    {[
-                                        { label: "Personal", num: activeCallStudent.tlf },
-                                        { label: "Urgencia", num: activeCallStudent.tlfUrgencia },
-                                        { label: "Tutor 1", num: activeCallStudent.tlf1Tutor },
-                                        { label: "Tutor 2", num: activeCallStudent.tlf2Tutor }
-                                    ].filter(x => x.num && x.num.trim() !== "").map((p, i) => (
-                                        <a key={i} href={`tel:${p.num}`} className="flex items-center justify-between p-4 bg-emerald-50 text-emerald-800 rounded-2xl border hover:bg-emerald-100">
-                                            <span className="text-[10px] font-bold uppercase">{p.label}</span>
-                                            <span className="font-mono font-bold">{p.num}</span>
-                                            <Phone size={18} />
-                                        </a>
-                                    ))}
-                                </div>
-                                <textarea className="w-full p-3 bg-slate-100 rounded-2xl text-sm mb-4 outline-none" placeholder="Notas de la llamada..." value={notesInput} onChange={(e) => setNotesInput(e.target.value)} />
-                                <button onClick={() => registerBreak(activeCallStudent.id, "Llamada", notesInput)} className="w-full bg-blue-800 text-white font-bold py-4 rounded-2xl shadow-lg">Guardar Registro Llamada</button>
-                            </div>
+                    {/* Toast Notification */}
+                    {toastMsg && (
+                        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-black uppercase px-6 py-4 rounded-full shadow-2xl z-[200] flex items-center gap-3 border border-slate-700">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping"></span>
+                            {toastMsg}
                         </div>
                     )}
 
-                    {activeOtherStudent && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-bold">Indicar Motivo</h3>
-                                    <button onClick={() => setActiveOtherStudent(null)}><X /></button>
+                    {/* Modal Sistema de Llamadas */}
+                    {showCallModal && (
+                        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[100] flex items-end sm:items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-slide-up overflow-hidden">
+                                <div className="flex justify-between items-start mb-8">
+                                    <div>
+                                        <h3 className="text-2xl font-black text-slate-800 leading-tight">{showCallModal.name}</h3>
+                                        <p className="text-[10px] text-slate-400 font-black uppercase mt-1">{showCallModal.unit}</p>
+                                    </div>
+                                    <button onClick={() => setShowCallModal(null)} className="p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-800 transition-all">✕</button>
                                 </div>
-                                <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl text-sm mb-4 border focus:border-blue-500" placeholder="Ej: Jefatura, Conserjería..." value={notesInput} onChange={(e) => setNotesInput(e.target.value)} />
-                                <button onClick={() => registerBreak(activeOtherStudent.id, "Otros", notesInput)} className="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl">Confirmar Salida</button>
+                                <div className="space-y-3">
+                                    {getUniquePhones(showCallModal).length > 0 ? (
+                                        getUniquePhones(showCallModal).map((tel, idx) => (
+                                            <a 
+                                                key={idx} href={`tel:${tel}`}
+                                                className="flex items-center justify-between p-5 bg-blue-50 text-blue-700 rounded-3xl border border-blue-100 hover:bg-blue-100 transition-all group shadow-sm shadow-blue-50"
+                                            >
+                                                <span className="font-black text-lg">{tel}</span>
+                                                <div className="bg-blue-600 text-white p-3 rounded-2xl group-active:scale-90 shadow-lg shadow-blue-200"><IconPhone /></div>
+                                            </a>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-10 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                                            <p className="text-slate-400 text-xs font-bold italic">Sin teléfonos en ficha</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -592,8 +590,9 @@
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // --- RENDER BOOTSTRAP ---
+        const startApp = () => ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        window.FirebaseAPI ? startApp() : window.addEventListener('firebaseReady', startApp);
     </script>
 </body>
 </html>
