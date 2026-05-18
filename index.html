@@ -30,7 +30,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCeQ6so402oADraHknUMMdB95zLtz8hNd8",
@@ -50,7 +50,7 @@
     window.FirebaseAPI = {
       auth, db, appId,
       signInWithCustomToken, signInAnonymously, onAuthStateChanged,
-      doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc
+      doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, getDocs
     };
 
     window.dispatchEvent(new CustomEvent('firebaseReady'));
@@ -61,7 +61,7 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     function initReactApp() {
-      const { auth, db, appId, signInWithCustomToken, signInAnonymously, onAuthStateChanged, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc } = window.FirebaseAPI;
+      const { auth, db, appId, signInWithCustomToken, signInAnonymously, onAuthStateChanged, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, getDocs } = window.FirebaseAPI;
 
       function App() {
         const [user, setUser] = useState(null);
@@ -82,6 +82,7 @@
         const [isAdminMode, setIsAdminMode] = useState(false);
         const [adminPass, setAdminPass] = useState('');
         const [isAdminAuth, setIsAdminAuth] = useState(false);
+        const [showResetConfirm, setShowResetConfirm] = useState(false);
 
         // Estados para la funcionalidad de llamada / enfermedad
         const [showCallModal, setShowCallModal] = useState(false);
@@ -284,6 +285,111 @@
           }
         };
 
+        // Función para purgar y reiniciar de cero todas las colecciones de salidas creadas
+        const handleResetAllData = async () => {
+          setIsProcessing(true);
+          try {
+            // Buscamos todas las colecciones recorriendo los días del año escolar
+            // y borrando los documentos que contienen de forma segura.
+            const startYear = new Date();
+            startYear.setDate(startYear.getDate() - 365);
+            const today = new Date();
+            
+            let current = new Date(startYear);
+            let totalDeleted = 0;
+
+            while (current <= today) {
+              const dateStr = current.toISOString().split('T')[0];
+              const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dateStr}`));
+              
+              const deletePromises = [];
+              querySnapshot.forEach((docSnap) => {
+                deletePromises.push(deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `records_${dateStr}`, docSnap.id)));
+                totalDeleted++;
+              });
+              
+              if (deletePromises.length > 0) {
+                await Promise.all(deletePromises);
+              }
+              current.setDate(current.getDate() + 1);
+            }
+
+            // También purgamos los listados cargados de alumnos y profesores si es necesario resetear todo
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'));
+            setStudents([]);
+
+            showToast(`Base de datos restaurada. ${totalDeleted} registros eliminados.`);
+            setShowResetConfirm(false);
+          } catch (err) {
+            console.error(err);
+            showToast("Error de permisos en el purgado de datos", "error");
+          } finally {
+            setIsProcessing(false);
+          }
+        };
+
+        // Función para exportar la base de datos histórica a un archivo CSV descargable
+        const handleExportToCSV = async () => {
+          setIsProcessing(true);
+          try {
+            const startYear = new Date();
+            startYear.setDate(startYear.getDate() - 365);
+            const today = new Date();
+            let current = new Date(startYear);
+            const allFetchedRecords = [];
+
+            while (current <= today) {
+              const dateStr = current.toISOString().split('T')[0];
+              const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dateStr}`));
+              querySnapshot.forEach((docSnap) => {
+                allFetchedRecords.push({ id: docSnap.id, ...docSnap.data() });
+              });
+              current.setDate(current.getDate() + 1);
+            }
+
+            if (allFetchedRecords.length === 0) {
+              showToast("No existen registros históricos para exportar", "error");
+              setIsProcessing(false);
+              return;
+            }
+
+            // Generar cabecera y contenido del CSV
+            let csvContent = "\ufeff"; // BOM para asegurar caracteres UTF-8 en Excel
+            csvContent += "Fecha,Hora,Alumno,Curso,Motivo,Profesor,Anotaciones\n";
+
+            allFetchedRecords.forEach(rec => {
+              const studentObj = students.find(s => s.id === rec.studentId);
+              const name = studentObj ? studentObj.name.replace(/,/g, ' ') : "Desconocido";
+              const unit = studentObj ? studentObj.unit : "S/A";
+              const dateObj = new Date(rec.timestamp);
+              const date = dateObj.toLocaleDateString();
+              const time = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const reason = rec.reason === 'baño' ? 'Baño' : 'Enfermedad-Llamada';
+              const teacher = rec.teacherName ? rec.teacherName.replace(/,/g, ' ') : "---";
+              const obs = rec.observation ? rec.observation.replace(/[\n,]/g, ' ') : "";
+
+              csvContent += `"${date}","${time}","${name}","${unit}","${reason}","${teacher}","${obs}"\n`;
+            });
+
+            // Descarga del navegador
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Historico_Pasillos_IES_Odiel_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Descarga de histórico iniciada");
+          } catch (err) {
+            console.error(err);
+            showToast("Error preparando la exportación", "error");
+          } finally {
+            setIsProcessing(false);
+          }
+        };
+
         // Procesador de PDFs adaptado para RegAlum_tlf.pdf con estructura de hileras complejas
         const processPDF = async (file, type) => {
           setIsProcessing(true);
@@ -412,20 +518,32 @@
                   </div>
                 </div>
               )}
-              <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden">
+              <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden text-center">
                 <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
                 
-                {/* Logo IES en formato SVG */}
-                <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center text-white mb-8 mx-auto shadow-xl shadow-blue-100 rotate-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21V10m0 0L7.5 6.5M12 10l4.5-3.5M3 5.625c0-1.036.84-1.875 1.875-1.875h14.25c1.036 0 1.875.84 1.875 1.875v12.75c0 1.036-.84 1.875-1.875 1.875H4.875A1.875 1.875 0 013 18.375V5.625z" />
-                  </svg>
+                {/* Carga del logotipo local IES_Odiel_logo.jpg en la pantalla de inicio */}
+                <div className="w-24 h-24 rounded-3xl flex items-center justify-center overflow-hidden mb-8 mx-auto shadow-xl">
+                  <img 
+                    src="IES_Odiel_logo.jpg" 
+                    alt="Logo IES Odiel" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback en caso de que la imagen local no se encuentre temporalmente
+                      e.target.style.display = 'none';
+                      e.target.parentNode.innerHTML = `
+                        <div class="w-full h-full bg-blue-600 flex items-center justify-center text-white">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 21V10m0 0L7.5 6.5M12 10l4.5-3.5M3 5.625c0-1.036.84-1.875 1.875-1.875h14.25c1.036 0 1.875.84 1.875 1.875v12.75c0 1.036-.84 1.875-1.875 1.875H4.875A1.875 1.875 0 013 18.375V5.625z" />
+                          </svg>
+                        </div>`;
+                    }}
+                  />
                 </div>
 
                 <h1 className="text-3xl font-black text-center mb-1 text-slate-800 uppercase tracking-tighter">IES ODIEL</h1>
                 <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mb-10">Control de Pasillo</p>
                 
-                <div className="space-y-4 mb-10">
+                <div className="space-y-4 mb-10 text-left">
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase ml-4 mb-1 block">Usuario IdEA</label>
                     <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="ej: jgarper123" className="w-full bg-slate-50 px-6 py-4 rounded-2xl outline-none font-bold text-sm border border-slate-100 focus:border-blue-600" />
@@ -449,7 +567,7 @@
         // --- PANTALLA ADMINISTRADOR ---
         if (isAdminMode) {
           return (
-            <div className="h-screen bg-slate-900 text-white p-8 flex flex-col items-center justify-center relative">
+            <div className="h-screen bg-slate-900 text-white p-8 flex flex-col items-center justify-center relative overflow-y-auto no-scrollbar">
               {statusMsg && (
                 <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[280px]">
                   <div className={`px-6 py-4 rounded-full shadow-2xl font-black text-xs text-center uppercase tracking-widest ${statusMsg.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-900 text-white'}`}>
@@ -457,24 +575,50 @@
                   </div>
                 </div>
               )}
-              <div className="w-full max-w-md">
-                <div className="flex justify-between items-center mb-10">
+
+              {/* Ventana de confirmación para el purgado general */}
+              {showResetConfirm && (
+                <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-6 z-[150] backdrop-blur-sm">
+                  <div className="bg-slate-800 p-6 rounded-[2rem] border border-slate-700 max-w-sm w-full text-center space-y-6">
+                    <p className="text-xl font-black text-red-500 uppercase tracking-tight">⚠️ Borrado Completo</p>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Esta acción eliminará de forma irreversible **TODAS** las salidas guardadas y la base de datos de alumnos para empezar de cero. ¿Estás seguro?
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={handleResetAllData} className="flex-1 bg-red-600 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest active:scale-95 transition-transform">Sí, Borrar Todo</button>
+                      <button onClick={() => setShowResetConfirm(false)} className="px-5 bg-slate-700 text-slate-300 font-bold py-4 rounded-xl text-xs">Cancelar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="w-full max-w-md my-auto py-10">
+                <div className="flex justify-between items-center mb-8">
                   <h2 className="text-2xl font-black uppercase tracking-tight">Gestión del Centro</h2>
-                  <button onClick={() => {setIsAdminMode(false); setIsAdminAuth(false);}} className="p-3 bg-slate-800 rounded-2xl text-slate-400">Cerrar</button>
+                  <button onClick={() => {setIsAdminMode(false); setIsAdminAuth(false);}} className="p-3 bg-slate-800 rounded-2xl text-slate-400 hover:text-white">Cerrar</button>
                 </div>
 
                 {!isAdminAuth ? (
                   <div className="space-y-6 text-center">
                     <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
                       <p className="text-[10px] font-black text-slate-500 uppercase mb-6 tracking-widest">Acceso Restringido</p>
-                      <input type="password" value={adminPass} onChange={e => setAdminPass(e.target.value)} placeholder="Contraseña Admin" className="w-full bg-slate-900 p-5 rounded-2xl border border-slate-700 font-bold mb-4 outline-none focus:border-blue-500 transition-all text-center" />
+                      
+                      {/* CORREGIDO: Sintaxis onChange restablecida correctamente para permitir la edición de texto */}
+                      <input 
+                        type="password" 
+                        value={adminPass} 
+                        onChange={(e) => setAdminPass(e.target.value)} 
+                        placeholder="Contraseña Admin" 
+                        className="w-full bg-slate-900 p-5 rounded-2xl border border-slate-700 font-bold mb-4 outline-none focus:border-blue-500 transition-all text-center text-white" 
+                      />
+                      
                       <button onClick={() => adminPass === 'odilea21' ? setIsAdminAuth(true) : showToast("Incorrecta", "error")} className="w-full bg-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-500 transition-colors">Entrar al Panel</button>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700">
-                      <p className="text-xs font-black text-slate-400 uppercase mb-6 tracking-widest">Importación de Datos (Séneca PDF)</p>
+                    <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 space-y-6">
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Carga de Datos (PDF Séneca)</p>
                       <div className="grid gap-4">
                         <label className="flex flex-col gap-2 bg-slate-700/30 p-6 rounded-3xl border border-slate-700 cursor-pointer hover:bg-slate-700/50">
                           <span className="text-xs font-black uppercase">📄 Listado de Alumnos</span>
@@ -486,6 +630,32 @@
                         </label>
                       </div>
                     </div>
+
+                    {/* NUEVAS FUNCIONALIDADES: Mantenimiento anual y exportación */}
+                    <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 space-y-4">
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Mantenimiento de Datos</p>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <button 
+                          onClick={handleExportToCSV}
+                          disabled={isProcessing}
+                          className="flex flex-col items-center justify-center gap-2 bg-slate-700/50 border border-slate-600 p-4 rounded-3xl hover:bg-slate-700 hover:border-slate-500 transition-all text-xs font-black text-white active:scale-95"
+                        >
+                          <span className="text-xl">📥</span>
+                          Exportar CSV
+                        </button>
+                        
+                        <button 
+                          onClick={() => setShowResetConfirm(true)}
+                          disabled={isProcessing}
+                          className="flex flex-col items-center justify-center gap-2 bg-red-950/40 border border-red-900 p-4 rounded-3xl hover:bg-red-950/60 hover:border-red-700 transition-all text-xs font-black text-red-400 active:scale-95"
+                        >
+                          <span className="text-xl">🗑️</span>
+                          Vaciar Todo
+                        </button>
+                      </div>
+                    </div>
+
                     {isProcessing && <div className="text-center font-black animate-pulse text-blue-400">Procesando...</div>}
                   </div>
                 )}
