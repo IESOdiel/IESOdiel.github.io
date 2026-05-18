@@ -500,6 +500,20 @@
           return name.trim();
         };
 
+        // Función para abrir la ventana de llamada
+        const handleOpenCallModal = (student) => {
+          setSelectedStudentForCall(student);
+          setCallObservation('');
+          setShowCallModal(true);
+        };
+
+        const handleSaveCallRecord = () => {
+          if (!selectedStudentForCall) return;
+          registerExit(selectedStudentForCall.id, 'enfermedad_llamada', callObservation);
+          setShowCallModal(false);
+          setSelectedStudentForCall(null);
+        };
+
         if (isLoading) return (
           <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400 font-bold">
             Cargando...
@@ -527,7 +541,7 @@
                     alt="Logo IES Odiel" 
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Fallback en caso de que la imagen local no se encuentre temporalmente
+                      // Fallback en caso de que la imagen local no se encuentre de forma transitoria
                       e.target.style.display = 'none';
                       e.target.parentNode.innerHTML = `
                         <div class="w-full h-full bg-blue-600 flex items-center justify-center text-white">
@@ -602,7 +616,7 @@
                     <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
                       <p className="text-[10px] font-black text-slate-500 uppercase mb-6 tracking-widest">Acceso Restringido</p>
                       
-                      {/* CORREGIDO: Sintaxis onChange restablecida correctamente para permitir la edición de texto */}
+                      {/* Sintaxis de control reactivo corregida */}
                       <input 
                         type="password" 
                         value={adminPass} 
@@ -630,7 +644,7 @@
                       </div>
                     </div>
 
-                    {/* NUEVAS FUNCIONALIDADES: Mantenimiento anual y exportación */}
+                    {/* Mantenimiento anual y exportación */}
                     <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 space-y-4">
                       <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Mantenimiento de Datos</p>
                       
@@ -674,9 +688,9 @@
               </div>
             )}
 
-            {/* CORREGIDO: MODAL DE ENFERMEDAD / LLAMADA TELEFÓNICA (Sin clases de animación incompatibles con el CDN de Tailwind) */}
+            {/* MODAL DE ENFERMEDAD / LLAMADA TELEFÓNICA (POSICIONADO AL NIVEL DEL CONTENEDOR PRINCIPAL) */}
             {showCallModal && selectedStudentForCall && (
-              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-[120]">
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-[200]">
                 <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl border border-slate-100">
                   <div className="flex justify-between items-start mb-4">
                     <h3 className="font-black text-slate-800 text-base uppercase tracking-tight">Aviso de Enfermedad</h3>
