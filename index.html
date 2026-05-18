@@ -389,14 +389,13 @@
           }
         };
 
-        // Procesador de PDFs adaptado para RegAlum_tlf.pdf con estructura de hileras complejas
+        // Procesador de PDFs adaptado para RegAlum_tlf.pdf con extracción optimizada de nombres y apellidos
         const processPDF = async (file, type) => {
           setIsProcessing(true);
           try {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let extractedData = [];
-            let totalLinesMatched = 0;
 
             for (let i = 1; i <= pdf.numPages; i++) {
               const page = await pdf.getPage(i);
@@ -431,44 +430,33 @@
               });
             }
 
-            // Consolidar líneas para unir nombres que se dividen por saltos de línea (Y-breaks) en las celdas del PDF
+            // MÉTODO ROBUSTO: Consolidar y empalmar líneas divididas preservando los nombres reales
             const consolidatedData = [];
             let currentPendingLine = "";
 
             extractedData.forEach(line => {
               const hasComma = line.includes(',');
-              const currentHasComma = currentPendingLine.includes(',');
 
-              if (hasComma) {
-                if (currentHasComma) {
+              // En el listado, cada alumno comienza con los apellidos (que acaban en coma)
+              if (hasComma && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
+                if (currentPendingLine) {
                   consolidatedData.push(currentPendingLine);
-                  currentPendingLine = line;
-                } else {
-                  if (currentPendingLine) {
-                    currentPendingLine += " " + line;
-                  } else {
-                    currentPendingLine = line;
-                  }
                 }
+                currentPendingLine = line; // Iniciamos una nueva línea de estudiante
               } else {
                 const lower = line.toLowerCase();
                 const isHeaderOrFooter = lower.includes('teléfono') || lower.includes('urgencia') || lower.includes('unidad') || lower.includes('tutor') || lower.includes('página') || lower.includes('ies') || lower.includes('odiel') || lower.includes('alumno/a') || lower.includes('profesor');
                 
+                // Si la línea no es cabecera/pie y tenemos un estudiante pendiente, se la adjuntamos al final
                 if (!isHeaderOrFooter && line.trim().length > 0) {
                   if (currentPendingLine) {
-                    // Si la línea pendiente ya contiene el apellido e inicio de coma, insertamos el fragmento del nombre justo tras la coma
-                    const commaIndex = currentPendingLine.indexOf(',');
-                    if (commaIndex !== -1) {
-                      currentPendingLine = currentPendingLine.slice(0, commaIndex + 1) + " " + line.trim() + " " + currentPendingLine.slice(commaIndex + 1);
-                    } else {
-                      currentPendingLine += " " + line;
-                    }
-                  } else {
-                    currentPendingLine = line;
+                    currentPendingLine += " " + line.trim();
                   }
                 }
               }
             });
+            
+            // Empujar el último estudiante procesado
             if (currentPendingLine) {
               consolidatedData.push(currentPendingLine);
             }
@@ -482,19 +470,20 @@
               const listadoAlumnosFinal = [];
 
               finalExtractedData.forEach((line, idx) => {
-                // Excluimos cabeceras e hileras sin comas en el nombre
-                if (line.includes(',') && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
+                if (line.includes(',')) {
                   const match = line.match(unitRegex);
                   if (match) {
-                    const lineParts = line.split(match[0]);
-                    
-                    // Extraemos los teléfonos presentes en la hilera del alumno
+                    // Extraer los teléfonos presentes en la línea para guardarlos
                     const phonesInLine = line.match(phoneRegex) || [];
                     const uniquePhones = [...new Set(phonesInLine)];
                     
-                    // Limpiamos estrictamente los teléfonos y la unidad del nombre para evitar fugas visuales
-                    let name = lineParts[0].trim();
-                    name = name.replace(phoneRegex, '').trim();
+                    // EXTRAER NOMBRE ROBUSTAMENTE: Eliminamos el curso y TODOS los teléfonos de la frase entera.
+                    // Esto garantiza que nos quede absolutamente todo el texto del nombre (Apellidos + Nombre).
+                    let name = line.replace(unitRegex, '');
+                    name = name.replace(phoneRegex, ''); 
+                    
+                    // Limpieza final de espacios sobrantes y puntuación residual
+                    name = name.replace(/\s+/g, ' '); 
                     name = name.replace(/^[, \t]+|[, \t]+$/g, '').trim();
 
                     listadoAlumnosFinal.push({
