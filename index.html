@@ -389,7 +389,7 @@
           }
         };
 
-        // Procesador de PDFs adaptado para RegAlum_tlf.pdf con extracción optimizada de nombres y apellidos
+        // Procesador de PDFs con Extracción Robusta "Método de Purgado Inverso"
         const processPDF = async (file, type) => {
           setIsProcessing(true);
           try {
@@ -401,13 +401,12 @@
               const page = await pdf.getPage(i);
               const textContent = await page.getTextContent();
               
-              // Agrupamiento por eje Y para evitar que se dividan filas
+              // Agrupamiento por eje Y para mantener el flujo horizontal
               const items = textContent.items;
               const rowsMap = {};
 
               items.forEach(item => {
                 const y = Math.round(item.transform[5]);
-                // Agrupamos en bandas de 4 píxeles para manejar variaciones de alineación
                 const matchedKey = Object.keys(rowsMap).find(k => Math.abs(Number(k) - y) < 4);
                 if (matchedKey) {
                   rowsMap[matchedKey].push(item);
@@ -416,11 +415,11 @@
                 }
               });
 
-              // Ordenamos las bandas del eje Y de arriba a abajo
+              // Ordenamos de arriba a abajo
               const sortedYKeys = Object.keys(rowsMap).sort((a, b) => Number(b) - Number(a));
 
               sortedYKeys.forEach(yKey => {
-                // Ordenamos los elementos dentro de la misma banda de izquierda a derecha (X)
+                // Ordenamos de izquierda a derecha (X)
                 const itemsInRow = rowsMap[yKey].sort((a, b) => a.transform[4] - b.transform[4]);
                 const rowText = itemsInRow.map(it => it.str).join(' ').trim();
                 
@@ -430,78 +429,61 @@
               });
             }
 
-            // MÉTODO ROBUSTO: Consolidar y empalmar líneas divididas preservando los nombres reales
-            const consolidatedData = [];
-            let currentPendingLine = "";
-
-            extractedData.forEach(line => {
-              const hasComma = line.includes(',');
-
-              // En el listado, cada alumno comienza con los apellidos (que acaban en coma)
-              if (hasComma && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
-                if (currentPendingLine) {
-                  consolidatedData.push(currentPendingLine);
-                }
-                currentPendingLine = line; // Iniciamos una nueva línea de estudiante
-              } else {
-                const lower = line.toLowerCase();
-                const isHeaderOrFooter = lower.includes('teléfono') || lower.includes('urgencia') || lower.includes('unidad') || lower.includes('tutor') || lower.includes('página') || lower.includes('ies') || lower.includes('odiel') || lower.includes('alumno/a') || lower.includes('profesor');
-                
-                // Si la línea no es cabecera/pie y tenemos un estudiante pendiente, se la adjuntamos al final
-                if (!isHeaderOrFooter && line.trim().length > 0) {
-                  if (currentPendingLine) {
-                    currentPendingLine += " " + line.trim();
-                  }
-                }
-              }
-            });
-            
-            // Empujar el último estudiante procesado
-            if (currentPendingLine) {
-              consolidatedData.push(currentPendingLine);
-            }
-
-            const finalExtractedData = type === 'students' ? consolidatedData : extractedData;
-
             if (type === 'students') {
-              // Captura de Unidad con indicador opcional de letra (p. ej. ESO A, BACH B)
+              // 1. Expresiones regulares
               const unitRegex = /\b([1-4]\s?º?\s?ESO(?:\s?[A-Z])?|[1-2]\s?º?\s?BACH(?:\s?[A-Z])?|FPB(?:\s?[A-Z])?|PRAGE|CFGM(?:\s?[A-Z])?|CFGS(?:\s?[A-Z])?|[1-2]º?\s?G\.\s?[A-Z\s]+)\b/i;
               const phoneRegex = /\b[6789]\d{8}\b/g;
+              
+              // 2. Unimos todo el texto extraído del documento en un solo hilo gigante
+              let fullString = extractedData.join(' ');
+              
+              // 3. Purgado inicial de encabezados para evitar interferencias
+              const stopwords = [/alumno\/a/gi, /teléfono de urgencia/gi, /teléfono primer tutor/gi, /teléfono segundo tutor/gi, /teléfono/gi, /unidad/gi, /página \d+ de \d+/gi, /ies odiel/gi, /profesor/gi];
+              stopwords.forEach(regex => { fullString = fullString.replace(regex, ''); });
+
+              // 4. Fragmentamos el hilo gigante usando la Unidad (1º ESO A, etc.) como cuchillo de corte
+              const parts = fullString.split(unitRegex);
               const listadoAlumnosFinal = [];
 
-              finalExtractedData.forEach((line, idx) => {
-                // Excluimos cabeceras e hileras sin comas en el nombre
-                if (line.includes(',') && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
-                  const match = line.match(unitRegex);
-                  if (match) {
-                    // Extraemos los teléfonos presentes en la hilera del alumno
-                    const phonesInLine = line.match(phoneRegex) || [];
-                    const uniquePhones = [...new Set(phonesInLine)];
-                    
-                    // Limpiamos estrictamente los teléfonos y la unidad del nombre para evitar fugas visuales
-                    // Usamos la línea completa para no perder el nombre de pila que aparecía después del curso
-                    let name = line.replace(match[0], '');
-                    name = name.replace(phoneRegex, '');
-                    name = name.replace(/\s+/g, ' ').trim();
-                    name = name.replace(/^[, \t]+|[, \t]+$/g, '').trim();
+              // parts[i] = Unidad, parts[i-1] = Texto anterior (contiene el nombre y teléfonos)
+              for (let i = 1; i < parts.length; i += 2) {
+                const unit = parts[i].toUpperCase().trim();
+                const textBeforeUnit = parts[i-1];
+                
+                // MÉTODO INVERSO: El nombre es exactamente el texto que sobra al quitarle todos los números
+                let name = textBeforeUnit.replace(/\b\d+\b/g, '').trim();
+                name = name.replace(/\s+/g, ' ').replace(/^[, \t\-]+|[, \t\-]+$/g, '').trim();
 
-                    listadoAlumnosFinal.push({
-                      id: `s-${idx}-${Date.now()}`,
-                      name,
-                      unit: match[0].toUpperCase(),
-                      phone1: uniquePhones[0] || 'No disponible',
-                      phone2: uniquePhones[1] || 'No disponible'
-                    });
-                  }
+                if (name && name.includes(',')) {
+                  // Rescatamos los teléfonos de forma segura
+                  const commaIndex = textBeforeUnit.indexOf(',');
+                  const textAfterComma = textBeforeUnit.substring(commaIndex);
+                  const phones1 = textAfterComma.match(phoneRegex) || [];
+                  
+                  const textAfterUnit = parts[i+1] || "";
+                  const nextCommaIndex = textAfterUnit.indexOf(',');
+                  const textBeforeNextName = nextCommaIndex !== -1 ? textAfterUnit.substring(0, nextCommaIndex) : textAfterUnit;
+                  const phones2 = textBeforeNextName.match(phoneRegex) || [];
+                  
+                  const uniquePhones = [...new Set([...phones1, ...phones2])];
+                  
+                  listadoAlumnosFinal.push({
+                    id: `s-${i}-${Date.now()}`,
+                    name: name,
+                    unit: unit,
+                    phone1: uniquePhones[0] || 'No disponible',
+                    phone2: uniquePhones[1] || 'No disponible'
+                  });
                 }
-              });
+              }
 
               await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: listadoAlumnosFinal });
               showToast(`Cargados ${listadoAlumnosFinal.length} alumnos`);
+
             } else if (type === 'teachers') {
               const teachers = {};
               const dniRegex = /\d{8}[A-Z]/i;
-              finalExtractedData.forEach(line => {
+              extractedData.forEach(line => {
                 const dniMatch = line.match(dniRegex);
                 if (dniMatch) {
                   // Filtramos el usuario de Séneca requiriendo que termine en dígitos
@@ -648,7 +630,6 @@
                     <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl">
                       <p className="text-[10px] font-black text-slate-500 uppercase mb-6 tracking-widest">Acceso Restringido</p>
                       
-                      {/* Sintaxis de control reactivo corregida */}
                       <input 
                         type="password" 
                         value={adminPass} 
@@ -720,7 +701,7 @@
               </div>
             )}
 
-            {/* MODAL DE ENFERMEDAD / LLAMADA TELEFÓNICA (POSICIONADO AL NIVEL DEL CONTENEDOR PRINCIPAL) */}
+            {/* MODAL DE ENFERMEDAD / LLAMADA TELEFÓNICA */}
             {showCallModal && selectedStudentForCall && (
               <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-[200]">
                 <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl border border-slate-100">
@@ -793,7 +774,7 @@
                   <div className="space-y-3">
                     <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar por nombre..." className="w-full bg-white px-6 py-5 rounded-3xl outline-none font-bold text-sm border border-slate-100 shadow-sm" />
                     
-                    {/* Desplegable de Curso completo con Subgrupo/Letra extraído del PDF */}
+                    {/* Desplegable de Curso */}
                     <div className="relative">
                       <select 
                         value={selectedUnit} 
