@@ -30,7 +30,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCeQ6so402oADraHknUMMdB95zLtz8hNd8",
@@ -50,7 +50,7 @@
     window.FirebaseAPI = {
       auth, db, appId,
       signInWithCustomToken, signInAnonymously, onAuthStateChanged,
-      doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc, query, where, orderBy, limit
+      doc, getDoc, setDoc, collection, onSnapshot, addDoc, deleteDoc
     };
 
     window.dispatchEvent(new CustomEvent('firebaseReady'));
@@ -88,13 +88,21 @@
         const [selectedStudentForCall, setSelectedStudentForCall] = useState(null);
         const [callObservation, setCallObservation] = useState('');
 
-        // Gestión de Autenticación
+        // Gestión de Autenticación con corrección de control de tokens
         useEffect(() => {
           const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
+            try {
+              // Intentar autenticación anónima por defecto para evitar problemas de tokens cruzados
               await signInAnonymously(auth);
+            } catch (err) {
+              console.warn("Fallo inicio de sesión anónimo, intentando token alternativo:", err);
+              try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                  await signInWithCustomToken(auth, __initial_auth_token);
+                }
+              } catch (tokenErr) {
+                console.error("Fallo definitivo en la autenticación:", tokenErr);
+              }
             }
           };
           initAuth();
@@ -498,7 +506,7 @@
                             </div>
                           </div>
                           
-                          {record.teacherName === teacherProfile.name && (
+                          {record.teacherName === teacherProfile?.name && (
                             <button onClick={() => deleteRecord(record.id)} className="text-slate-300 hover:text-red-500 p-2 text-sm">✕</button>
                           )}
                         </div>
