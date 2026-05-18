@@ -431,13 +431,57 @@
               });
             }
 
+            // Consolidar líneas para unir nombres que se dividen por saltos de línea (Y-breaks) en las celdas del PDF
+            const consolidatedData = [];
+            let currentPendingLine = "";
+
+            extractedData.forEach(line => {
+              const hasComma = line.includes(',');
+              const currentHasComma = currentPendingLine.includes(',');
+
+              if (hasComma) {
+                if (currentHasComma) {
+                  consolidatedData.push(currentPendingLine);
+                  currentPendingLine = line;
+                } else {
+                  if (currentPendingLine) {
+                    currentPendingLine += " " + line;
+                  } else {
+                    currentPendingLine = line;
+                  }
+                }
+              } else {
+                const lower = line.toLowerCase();
+                const isHeaderOrFooter = lower.includes('teléfono') || lower.includes('urgencia') || lower.includes('unidad') || lower.includes('tutor') || lower.includes('página') || lower.includes('ies') || lower.includes('odiel') || lower.includes('alumno/a') || lower.includes('profesor');
+                
+                if (!isHeaderOrFooter && line.trim().length > 0) {
+                  if (currentPendingLine) {
+                    // Si la línea pendiente ya contiene el apellido e inicio de coma, insertamos el fragmento del nombre justo tras la coma
+                    const commaIndex = currentPendingLine.indexOf(',');
+                    if (commaIndex !== -1) {
+                      currentPendingLine = currentPendingLine.slice(0, commaIndex + 1) + " " + line.trim() + " " + currentPendingLine.slice(commaIndex + 1);
+                    } else {
+                      currentPendingLine += " " + line;
+                    }
+                  } else {
+                    currentPendingLine = line;
+                  }
+                }
+              }
+            });
+            if (currentPendingLine) {
+              consolidatedData.push(currentPendingLine);
+            }
+
+            const finalExtractedData = type === 'students' ? consolidatedData : extractedData;
+
             if (type === 'students') {
               // Captura de Unidad con indicador opcional de letra (p. ej. ESO A, BACH B)
               const unitRegex = /\b([1-4]\s?º?\s?ESO(?:\s?[A-Z])?|[1-2]\s?º?\s?BACH(?:\s?[A-Z])?|FPB(?:\s?[A-Z])?|PRAGE|CFGM(?:\s?[A-Z])?|CFGS(?:\s?[A-Z])?|[1-2]º?\s?G\.\s?[A-Z\s]+)\b/i;
               const phoneRegex = /\b[6789]\d{8}\b/g;
               const listadoAlumnosFinal = [];
 
-              extractedData.forEach((line, idx) => {
+              finalExtractedData.forEach((line, idx) => {
                 // Excluimos cabeceras e hileras sin comas en el nombre
                 if (line.includes(',') && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
                   const match = line.match(unitRegex);
@@ -469,7 +513,7 @@
             } else if (type === 'teachers') {
               const teachers = {};
               const dniRegex = /\d{8}[A-Z]/i;
-              extractedData.forEach(line => {
+              finalExtractedData.forEach(line => {
                 const dniMatch = line.match(dniRegex);
                 if (dniMatch) {
                   // Filtramos el usuario de Séneca requiriendo que termine en dígitos
