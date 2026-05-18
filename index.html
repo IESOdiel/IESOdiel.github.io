@@ -16,6 +16,9 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
   </script>
 
+  <!-- Carga del Motor SheetJS para leer archivos Excel (.xlsx, .csv) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
   <style>
     body { -webkit-tap-highlight-color: transparent; }
     select { -webkit-appearance: none; appearance: none; }
@@ -152,7 +155,6 @@
         useEffect(() => {
           if (!user || activeTab !== 'reports') return;
 
-          // Hacemos lecturas por días en el rango seleccionado
           const start = new Date(reportStartDate);
           const end = new Date(reportEndDate);
           const datesToQuery = [];
@@ -172,11 +174,9 @@
               snap.forEach(d => dayData.push({ id: d.id, ...d.data() }));
               tempRecordsMap[dateStr] = dayData;
               
-              // Unificar todos los registros cargados hasta el momento
               const allHist = Object.values(tempRecordsMap).flat();
               setHistoricalRecords(allHist.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
             }, (err) => {
-              // Si la colección no existe aún, simplemente guardamos vacío
               tempRecordsMap[dateStr] = [];
             });
             unsubs.push(unsub);
@@ -209,12 +209,10 @@
           }).slice(0, 100);
         }, [students, searchTerm, selectedUnit]);
 
-        // Filtrado de informes históricos
         const filteredHistoricalRecords = useMemo(() => {
           return historicalRecords.filter(r => {
             const student = students.find(s => s.id === r.studentId);
             if (!student) return false;
-            // Si hay un curso de informe seleccionado, debe coincidir
             if (reportUnit && student.unit !== reportUnit) return false;
             return true;
           });
@@ -236,7 +234,7 @@
           }
 
           if (Object.keys(teachersDB).length === 0) {
-            showToast("Base de datos de profesores vacía. Usa Administrador para cargar el PDF.", "error");
+            showToast("Base de datos de profesores vacía. Usa Administrador para cargar datos.", "error");
             return;
           }
           
@@ -285,11 +283,9 @@
           }
         };
 
-        // Función para purgar y reiniciar de cero todas las colecciones de salidas creadas
         const handleResetAllData = async () => {
           setIsProcessing(true);
           try {
-            // Buscamos todas las colecciones de forma recursiva por los días del año escolar
             const startYear = new Date();
             startYear.setDate(startYear.getDate() - 365);
             const today = new Date();
@@ -313,7 +309,6 @@
               current.setDate(current.getDate() + 1);
             }
 
-            // También purgamos los listados cargados de alumnos y profesores si es necesario resetear todo
             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'));
             setStudents([]);
 
@@ -327,7 +322,6 @@
           }
         };
 
-        // Función para exportar la base de datos histórica a un archivo CSV descargable
         const handleExportToCSV = async () => {
           setIsProcessing(true);
           try {
@@ -352,8 +346,7 @@
               return;
             }
 
-            // Generar cabecera y contenido del CSV
-            let csvContent = "\ufeff"; // BOM para asegurar caracteres UTF-8 en Excel
+            let csvContent = "\ufeff"; 
             csvContent += "Fecha,Hora,Alumno,Curso,Motivo,Profesor,Anotaciones\n";
 
             allFetchedRecords.forEach(rec => {
@@ -370,7 +363,6 @@
               csvContent += `"${date}","${time}","${name}","${unit}","${reason}","${teacher}","${obs}"\n`;
             });
 
-            // Descarga del navegador
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
@@ -389,132 +381,232 @@
           }
         };
 
-        // Procesador de PDFs con Extracción Robusta "Método de Purgado Inverso"
-        const processPDF = async (file, type) => {
+        // Procesador de archivos dual: Maneja tanto EXCEL (.xlsx, .csv) como PDF
+        const processFile = async (file, type) => {
+          if (!file) return;
           setIsProcessing(true);
           try {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let extractedData = [];
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-              const page = await pdf.getPage(i);
-              const textContent = await page.getTextContent();
+            const fileName = file.name.toLowerCase();
+            
+            // ========================================================
+            // LÓGICA DE PROCESADO PARA EXCEL / CSV (NUEVO MÉTODO IDEAL)
+            // ========================================================
+            if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
+              const arrayBuffer = await file.arrayBuffer();
+              const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
               
-              // Agrupamiento por eje Y para mantener el flujo horizontal
-              const items = textContent.items;
-              const rowsMap = {};
+              // Exportamos la hoja a un array de arrays para identificar las columnas por su texto
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-              items.forEach(item => {
-                const y = Math.round(item.transform[5]);
-                const matchedKey = Object.keys(rowsMap).find(k => Math.abs(Number(k) - y) < 4);
-                if (matchedKey) {
-                  rowsMap[matchedKey].push(item);
-                } else {
-                  rowsMap[y] = [item];
-                }
-              });
+              if (jsonData.length < 2) throw new Error("Archivo vacío o sin datos");
 
-              // Ordenamos de arriba a abajo
-              const sortedYKeys = Object.keys(rowsMap).sort((a, b) => Number(b) - Number(a));
-
-              sortedYKeys.forEach(yKey => {
-                // Ordenamos de izquierda a derecha (X)
-                const itemsInRow = rowsMap[yKey].sort((a, b) => a.transform[4] - b.transform[4]);
-                const rowText = itemsInRow.map(it => it.str).join(' ').trim();
-                
-                if (rowText.length > 5) {
-                  extractedData.push(rowText);
-                }
-              });
-            }
-
-            if (type === 'students') {
-              // 1. Expresiones regulares
-              const unitRegex = /\b([1-4]\s?º?\s?ESO(?:\s?[A-Z])?|[1-2]\s?º?\s?BACH(?:\s?[A-Z])?|FPB(?:\s?[A-Z])?|PRAGE|CFGM(?:\s?[A-Z])?|CFGS(?:\s?[A-Z])?|[1-2]º?\s?G\.\s?[A-Z\s]+)\b/i;
-              const phoneRegex = /\b[6789]\d{8}\b/g;
-              
-              // 2. Unimos todo el texto extraído del documento en un solo hilo gigante
-              let fullString = extractedData.join(' ');
-              
-              // 3. Purgado inicial de encabezados para evitar interferencias
-              const stopwords = [/alumno\/a/gi, /teléfono de urgencia/gi, /teléfono primer tutor/gi, /teléfono segundo tutor/gi, /teléfono/gi, /unidad/gi, /página \d+ de \d+/gi, /ies odiel/gi, /profesor/gi];
-              stopwords.forEach(regex => { fullString = fullString.replace(regex, ''); });
-
-              // 4. Fragmentamos el hilo gigante usando la Unidad (1º ESO A, etc.) como cuchillo de corte
-              const parts = fullString.split(unitRegex);
-              const listadoAlumnosFinal = [];
-
-              // parts[i] = Unidad, parts[i-1] = Texto anterior (contiene el nombre y teléfonos)
-              for (let i = 1; i < parts.length; i += 2) {
-                const unit = parts[i].toUpperCase().trim();
-                const textBeforeUnit = parts[i-1];
-                
-                // MÉTODO INVERSO: El nombre es exactamente el texto que sobra al quitarle todos los números
-                let name = textBeforeUnit.replace(/\b\d+\b/g, '').trim();
-                name = name.replace(/\s+/g, ' ').replace(/^[, \t\-]+|[, \t\-]+$/g, '').trim();
-
-                if (name && name.includes(',')) {
-                  // Rescatamos los teléfonos de forma segura
-                  const commaIndex = textBeforeUnit.indexOf(',');
-                  const textAfterComma = textBeforeUnit.substring(commaIndex);
-                  const phones1 = textAfterComma.match(phoneRegex) || [];
-                  
-                  const textAfterUnit = parts[i+1] || "";
-                  const nextCommaIndex = textAfterUnit.indexOf(',');
-                  const textBeforeNextName = nextCommaIndex !== -1 ? textAfterUnit.substring(0, nextCommaIndex) : textAfterUnit;
-                  const phones2 = textBeforeNextName.match(phoneRegex) || [];
-                  
-                  const uniquePhones = [...new Set([...phones1, ...phones2])];
-                  
-                  listadoAlumnosFinal.push({
-                    id: `s-${i}-${Date.now()}`,
-                    name: name,
-                    unit: unit,
-                    phone1: uniquePhones[0] || 'No disponible',
-                    phone2: uniquePhones[1] || 'No disponible'
-                  });
-                }
+              // Buscar la fila real que contiene las cabeceras (Ignorando títulos de la Junta de Andalucía, etc.)
+              let headerRowIndex = 0;
+              for (let r = 0; r < Math.min(15, jsonData.length); r++) {
+                  const rowStr = jsonData[r].map(c => String(c || '').toLowerCase()).join(' ');
+                  if (rowStr.includes('alumno') || rowStr.includes('unidad') || rowStr.includes('profesor') || rowStr.includes('dni')) {
+                      headerRowIndex = r;
+                      break;
+                  }
               }
 
-              await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: listadoAlumnosFinal });
-              showToast(`Cargados ${listadoAlumnosFinal.length} alumnos`);
+              const headers = jsonData[headerRowIndex].map(h => String(h || '').toLowerCase().trim());
+              const dataRows = jsonData.slice(headerRowIndex + 1);
 
-            } else if (type === 'teachers') {
-              const teachers = {};
-              const dniRegex = /\d{8}[A-Z]/i;
-              extractedData.forEach(line => {
-                const dniMatch = line.match(dniRegex);
-                if (dniMatch) {
-                  // Filtramos el usuario de Séneca requiriendo que termine en dígitos
-                  const userMatch = line.match(/\b[a-zA-Z]{3,10}\d{1,4}\b/);
+              if (type === 'students') {
+                const nameIdx = headers.findIndex(h => h.includes('alumno'));
+                const unitIdx = headers.findIndex(h => h.includes('unidad') || h.includes('curso'));
+                
+                let p1Idx = headers.findIndex(h => h.includes('primer tutor'));
+                if (p1Idx === -1) p1Idx = headers.findIndex(h => h.includes('teléfono') && !h.includes('urgencia'));
+                
+                let p2Idx = headers.findIndex(h => h.includes('segundo tutor') || h.includes('urgencia'));
+
+                const listadoAlumnosFinal = [];
+                
+                dataRows.forEach((row, idx) => {
+                  if (nameIdx === -1 || !row[nameIdx]) return; // Evitar filas vacías
                   
-                  let name = line;
-                  name = name.replace(dniMatch[0], '');
-                  if (userMatch) name = name.replace(userMatch[0], '');
-                  name = name.trim().replace(/^[, \t\-]+|[, \t\-]+$/g, '').trim();
+                  const nameValue = String(row[nameIdx]);
+                  if (!nameValue || nameValue.toLowerCase().includes('alumno/a')) return;
 
-                  const idea = userMatch ? userMatch[0].toLowerCase() : dniMatch[0].toUpperCase();
-                  teachers[idea] = { nombre: name, dni: dniMatch[0].toUpperCase() };
+                  const name = nameValue.replace(/[\r\n]+/g, ' ').trim();
+                  const unit = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).trim().toUpperCase() : 'S/A';
+                  
+                  const extractPhone = (val) => {
+                      if (!val) return 'No disponible';
+                      const digits = String(val).replace(/\D/g, '');
+                      return digits.length >= 9 ? digits : 'No disponible';
+                  };
+
+                  listadoAlumnosFinal.push({
+                    id: `s-${idx}-${Date.now()}`,
+                    name: name,
+                    unit: unit,
+                    phone1: extractPhone(p1Idx !== -1 ? row[p1Idx] : null),
+                    phone2: extractPhone(p2Idx !== -1 ? row[p2Idx] : null)
+                  });
+                });
+                
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: listadoAlumnosFinal });
+                showToast(`Cargados ${listadoAlumnosFinal.length} alumnos desde Excel`);
+
+              } else if (type === 'teachers') {
+                const nameIdx = headers.findIndex(h => h.includes('profesor') || h.includes('nombre') || h.includes('empleado'));
+                const dniIdx = headers.findIndex(h => h.includes('dni') || h.includes('nif'));
+                const userIdx = headers.findIndex(h => h.includes('idea') || h.includes('usuario'));
+
+                const teachers = {};
+                dataRows.forEach(row => {
+                   if (nameIdx === -1 || !row[nameIdx]) return;
+                   
+                   const name = String(row[nameIdx]).trim();
+                   const dni = dniIdx !== -1 && row[dniIdx] ? String(row[dniIdx]).trim().toUpperCase() : '';
+                   
+                   // Si no existe la columna de IdEA explícita, se usa el DNI como respaldo de validación
+                   const idea = userIdx !== -1 && row[userIdx] ? String(row[userIdx]).trim().toLowerCase() : (dni ? dni.toLowerCase() : '');
+                   
+                   if (idea && name && dni) {
+                      teachers[idea] = { nombre: name, dni: dni };
+                   }
+                });
+                
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list: teachers });
+                showToast(`Cargados ${Object.keys(teachers).length} profesores desde Excel`);
+              }
+            } 
+            // ========================================================
+            // LÓGICA DE RESPALDO PARA PDF (LA QUE YA EXISTÍA)
+            // ========================================================
+            else if (fileName.endsWith('.pdf')) {
+              const arrayBuffer = await file.arrayBuffer();
+              const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+              let extractedData = [];
+
+              for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                
+                const items = textContent.items;
+                const rowsMap = {};
+
+                items.forEach(item => {
+                  const y = Math.round(item.transform[5]);
+                  const matchedKey = Object.keys(rowsMap).find(k => Math.abs(Number(k) - y) < 4);
+                  if (matchedKey) {
+                    rowsMap[matchedKey].push(item);
+                  } else {
+                    rowsMap[y] = [item];
+                  }
+                });
+
+                const sortedYKeys = Object.keys(rowsMap).sort((a, b) => Number(b) - Number(a));
+
+                sortedYKeys.forEach(yKey => {
+                  const itemsInRow = rowsMap[yKey].sort((a, b) => a.transform[4] - b.transform[4]);
+                  const rowText = itemsInRow.map(it => it.str).join(' ').trim();
+                  
+                  if (rowText.length > 5) {
+                    extractedData.push(rowText);
+                  }
+                });
+              }
+
+              const consolidatedData = [];
+              let currentPendingLine = "";
+
+              extractedData.forEach(line => {
+                const hasComma = line.includes(',');
+
+                if (hasComma && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
+                  if (currentPendingLine) {
+                    consolidatedData.push(currentPendingLine);
+                  }
+                  currentPendingLine = line; 
+                } else {
+                  const lower = line.toLowerCase();
+                  const isHeaderOrFooter = lower.includes('teléfono') || lower.includes('urgencia') || lower.includes('unidad') || lower.includes('tutor') || lower.includes('página') || lower.includes('ies') || lower.includes('odiel') || lower.includes('alumno/a') || lower.includes('profesor');
+                  
+                  if (!isHeaderOrFooter && line.trim().length > 0) {
+                    if (currentPendingLine) {
+                      currentPendingLine += " " + line.trim();
+                    }
+                  }
                 }
               });
-              await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list: teachers });
-              showToast(`Cargados ${Object.keys(teachers).length} profesores`);
+              
+              if (currentPendingLine) {
+                consolidatedData.push(currentPendingLine);
+              }
+
+              const finalExtractedData = type === 'students' ? consolidatedData : extractedData;
+
+              if (type === 'students') {
+                const unitRegex = /\b([1-4]\s?º?\s?ESO(?:\s?[A-Z])?|[1-2]\s?º?\s?BACH(?:\s?[A-Z])?|FPB(?:\s?[A-Z])?|PRAGE|CFGM(?:\s?[A-Z])?|CFGS(?:\s?[A-Z])?|[1-2]º?\s?G\.\s?[A-Z\s]+)\b/i;
+                const phoneRegex = /\b[6789]\d{8}\b/g;
+                const listadoAlumnosFinal = [];
+
+                finalExtractedData.forEach((line, idx) => {
+                  if (line.includes(',')) {
+                    const match = line.match(unitRegex);
+                    if (match) {
+                      const phonesInLine = line.match(phoneRegex) || [];
+                      const uniquePhones = [...new Set(phonesInLine)];
+                      
+                      let name = line.replace(unitRegex, '');
+                      name = name.replace(phoneRegex, ''); 
+                      name = name.replace(/\s+/g, ' ').trim(); 
+                      name = name.replace(/^[, \t]+|[, \t]+$/g, '').trim();
+
+                      listadoAlumnosFinal.push({
+                        id: `s-${idx}-${Date.now()}`,
+                        name,
+                        unit: match[0].toUpperCase(),
+                        phone1: uniquePhones[0] || 'No disponible',
+                        phone2: uniquePhones[1] || 'No disponible'
+                      });
+                    }
+                  }
+                });
+
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: listadoAlumnosFinal });
+                showToast(`Cargados ${listadoAlumnosFinal.length} alumnos`);
+              } else if (type === 'teachers') {
+                const teachers = {};
+                const dniRegex = /\d{8}[A-Z]/i;
+                finalExtractedData.forEach(line => {
+                  const dniMatch = line.match(dniRegex);
+                  if (dniMatch) {
+                    const userMatch = line.match(/\b[a-zA-Z]{3,10}\d{1,4}\b/);
+                    let name = line;
+                    name = name.replace(dniMatch[0], '');
+                    if (userMatch) name = name.replace(userMatch[0], '');
+                    name = name.trim().replace(/^[, \t\-]+|[, \t\-]+$/g, '').trim();
+
+                    const idea = userMatch ? userMatch[0].toLowerCase() : dniMatch[0].toUpperCase();
+                    teachers[idea] = { nombre: name, dni: dniMatch[0].toUpperCase() };
+                  }
+                });
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'teachers'), { list: teachers });
+                showToast(`Cargados ${Object.keys(teachers).length} profesores`);
+              }
+            } else {
+               showToast("Por favor sube un archivo Excel o PDF", "error");
             }
           } catch (e) {
-            console.error("Error PDF parse:", e);
-            showToast("Error procesando PDF", "error");
+            console.error("Error file parse:", e);
+            showToast("Error procesando archivo", "error");
           }
           setIsProcessing(false);
         };
 
-        // Muestra el nombre completo del profesor (Apellidos, Nombre)
         const formatDisplayName = (name) => {
           if (!name) return "";
           return name.trim();
         };
 
-        // Función para abrir la ventana de llamada
         const handleOpenCallModal = (student) => {
           setSelectedStudentForCall(student);
           setCallObservation('');
@@ -534,7 +626,6 @@
           </div>
         );
 
-        // --- PANTALLA INICIO DE SESIÓN ---
         if (!teacherProfile && !isAdminMode) {
           return (
             <div className="h-screen flex flex-col items-center justify-center p-6 bg-slate-50 relative">
@@ -548,14 +639,12 @@
               <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden text-center">
                 <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
                 
-                {/* Carga del logotipo local IES_Odiel_logo.jpg en la pantalla de inicio */}
                 <div className="w-24 h-24 rounded-3xl flex items-center justify-center overflow-hidden mb-8 mx-auto shadow-xl">
                   <img 
                     src="IES_Odiel_logo.jpg" 
                     alt="Logo IES Odiel" 
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Fallback en caso de que la imagen local no se encuentre de forma transitoria
                       e.target.style.display = 'none';
                       e.target.parentNode.innerHTML = `
                         <div class="w-full h-full bg-blue-600 flex items-center justify-center text-white">
@@ -591,7 +680,6 @@
           );
         }
 
-        // --- PANTALLA ADMINISTRADOR ---
         if (isAdminMode) {
           return (
             <div className="h-screen bg-slate-900 text-white p-8 flex flex-col items-center justify-center relative overflow-y-auto no-scrollbar">
@@ -603,7 +691,6 @@
                 </div>
               )}
 
-              {/* Ventana de confirmación para el purgado general */}
               {showResetConfirm && (
                 <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-6 z-[150] backdrop-blur-sm">
                   <div className="bg-slate-800 p-6 rounded-[2rem] border border-slate-700 max-w-sm w-full text-center space-y-6">
@@ -644,20 +731,21 @@
                 ) : (
                   <div className="space-y-6">
                     <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 space-y-6">
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Carga de Datos (PDF Séneca)</p>
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Carga de Datos (Excel o PDF)</p>
                       <div className="grid gap-4">
                         <label className="flex flex-col gap-2 bg-slate-700/30 p-6 rounded-3xl border border-slate-700 cursor-pointer hover:bg-slate-700/50">
-                          <span className="text-xs font-black uppercase">📄 Listado de Alumnos</span>
-                          <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'students')} />
+                          <span className="text-xs font-black uppercase text-emerald-400">📊 Listado de Alumnos (Recomendado)</span>
+                          <span className="text-[9px] text-slate-400">Admite .xlsx, .csv y .pdf</span>
+                          <input type="file" accept=".pdf, .xlsx, .xls, .csv" className="hidden" onChange={e => processFile(e.target.files[0], 'students')} />
                         </label>
                         <label className="flex flex-col gap-2 bg-slate-700/30 p-6 rounded-3xl border border-slate-700 cursor-pointer hover:bg-slate-700/50">
-                          <span className="text-xs font-black uppercase">👨‍🏫 Listado Profesorado</span>
-                          <input type="file" accept=".pdf" className="hidden" onChange={e => processPDF(e.target.files[0], 'teachers')} />
+                          <span className="text-xs font-black uppercase text-emerald-400">👩‍🏫 Listado Profesorado</span>
+                          <span className="text-[9px] text-slate-400">Admite .xlsx, .csv y .pdf</span>
+                          <input type="file" accept=".pdf, .xlsx, .xls, .csv" className="hidden" onChange={e => processFile(e.target.files[0], 'teachers')} />
                         </label>
                       </div>
                     </div>
 
-                    {/* Mantenimiento anual y exportación */}
                     <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 space-y-4">
                       <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Mantenimiento de Datos</p>
                       
@@ -682,7 +770,7 @@
                       </div>
                     </div>
 
-                    {isProcessing && <div className="text-center font-black animate-pulse text-blue-400">Procesando...</div>}
+                    {isProcessing && <div className="text-center font-black animate-pulse text-blue-400">Procesando archivo...</div>}
                   </div>
                 )}
               </div>
@@ -690,7 +778,6 @@
           );
         }
 
-        // --- PANTALLA PRINCIPAL DE CONTROL ---
         return (
           <div className="h-screen flex flex-col max-w-md mx-auto bg-slate-50 relative shadow-2xl overflow-hidden">
             {statusMsg && (
@@ -701,7 +788,6 @@
               </div>
             )}
 
-            {/* MODAL DE ENFERMEDAD / LLAMADA TELEFÓNICA */}
             {showCallModal && selectedStudentForCall && (
               <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-[200]">
                 <div className="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl border border-slate-100">
@@ -761,7 +847,6 @@
               <button onClick={() => { setTeacherProfile(null); deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'active')); }} className="p-4 bg-slate-50 rounded-2xl text-slate-400 shrink-0 ml-2">Cerrar</button>
             </header>
 
-            {/* NAVEGACIÓN PRINCIPAL */}
             <nav className="flex px-6 py-4 gap-2 bg-white border-b border-slate-100 shrink-0">
               <button onClick={() => setActiveTab('list')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'list' ? 'bg-slate-900 text-white shadow-xl' : 'bg-slate-50 text-slate-400'}`}>Alumnado</button>
               <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 text-[10px] font-black rounded-2xl transition-all uppercase tracking-widest ${activeTab === 'history' ? 'bg-slate-900 text-white shadow-xl' : 'bg-slate-50 text-slate-400'}`}>Historial</button>
@@ -774,7 +859,6 @@
                   <div className="space-y-3">
                     <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar por nombre..." className="w-full bg-white px-6 py-5 rounded-3xl outline-none font-bold text-sm border border-slate-100 shadow-sm" />
                     
-                    {/* Desplegable de Curso */}
                     <div className="relative">
                       <select 
                         value={selectedUnit} 
@@ -809,7 +893,6 @@
                             </div>
                           </div>
                           <div className="flex gap-2 shrink-0">
-                            {/* Botón de Salida al Baño con su contador en la esquina superior izquierda */}
                             <div className="relative">
                               <button onClick={() => registerExit(student.id, 'baño')} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center border border-blue-100 font-bold active:scale-90 transition-transform text-lg">🚻</button>
                               {bañoCount > 0 && (
@@ -819,7 +902,6 @@
                               )}
                             </div>
 
-                            {/* Botón de Llamada por Enfermedad con su contador en la esquina superior izquierda */}
                             <div className="relative">
                               <button onClick={() => handleOpenCallModal(student)} className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center border border-slate-200 font-bold active:scale-90 transition-transform text-lg">📞</button>
                               {callCount > 0 && (
@@ -846,7 +928,6 @@
                     const reasonIcon = record.reason === 'baño' ? '🚻' : '📞';
                     const reason = record.reason === 'baño' ? 'Baño' : 'Enfermo / Llamada';
                     
-                    // Condición para mostrar papelera: el profesor que registró debe ser el mismo que el logueado
                     const canDelete = record.teacherName === teacherProfile?.name;
                     
                     return (
@@ -885,13 +966,11 @@
                 </div>
               )}
 
-              {/* PESTAÑA INFORMES */}
               {activeTab === 'reports' && (
                 <div className="space-y-6">
                   <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Filtros de Informe</p>
                     
-                    {/* Desplegable de selección de grupo */}
                     <div className="relative">
                       <select 
                         value={reportUnit} 
@@ -908,7 +987,6 @@
                       </div>
                     </div>
 
-                    {/* Selector de fechas Desde - Hasta */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Desde</label>
@@ -944,7 +1022,6 @@
                         const reasonIcon = record.reason === 'baño' ? '🚻' : '📞';
                         const reason = record.reason === 'baño' ? 'Baño' : 'Enfermo / Llamada';
                         
-                        // Restricción estricta de borrado también en la pestaña de informes
                         const canDelete = record.teacherName === teacherProfile?.name;
 
                         return (
