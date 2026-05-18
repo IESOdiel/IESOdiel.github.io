@@ -470,20 +470,19 @@
               const listadoAlumnosFinal = [];
 
               finalExtractedData.forEach((line, idx) => {
-                if (line.includes(',')) {
+                // Excluimos cabeceras e hileras sin comas en el nombre
+                if (line.includes(',') && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
                   const match = line.match(unitRegex);
                   if (match) {
-                    // Extraer los teléfonos presentes en la línea para guardarlos
+                    // Extraemos los teléfonos presentes en la hilera del alumno
                     const phonesInLine = line.match(phoneRegex) || [];
                     const uniquePhones = [...new Set(phonesInLine)];
                     
-                    // EXTRAER NOMBRE ROBUSTAMENTE: Eliminamos el curso y TODOS los teléfonos de la frase entera.
-                    // Esto garantiza que nos quede absolutamente todo el texto del nombre (Apellidos + Nombre).
-                    let name = line.replace(unitRegex, '');
-                    name = name.replace(phoneRegex, ''); 
-                    
-                    // Limpieza final de espacios sobrantes y puntuación residual
-                    name = name.replace(/\s+/g, ' '); 
+                    // Limpiamos estrictamente los teléfonos y la unidad del nombre para evitar fugas visuales
+                    // Usamos la línea completa para no perder el nombre de pila que aparecía después del curso
+                    let name = line.replace(match[0], '');
+                    name = name.replace(phoneRegex, '');
+                    name = name.replace(/\s+/g, ' ').trim();
                     name = name.replace(/^[, \t]+|[, \t]+$/g, '').trim();
 
                     listadoAlumnosFinal.push({
