@@ -293,6 +293,7 @@
             let current = new Date(startYear);
             let totalDeleted = 0;
 
+            // Únicamente recorremos y borramos las colecciones de registros diarios (salidas y llamadas)
             while (current <= today) {
               const dateStr = current.toISOString().split('T')[0];
               const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dateStr}`));
@@ -309,10 +310,8 @@
               current.setDate(current.getDate() + 1);
             }
 
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'));
-            setStudents([]);
-
-            showToast(`Base de datos restaurada. ${totalDeleted} registros eliminados.`);
+            // Ya NO se borra la lista de alumnos ni se limpia el estado setStudents([])
+            showToast(`Historial restaurado. ${totalDeleted} registros eliminados.`);
             setShowResetConfirm(false);
           } catch (err) {
             console.error(err);
@@ -508,75 +507,62 @@
                   const itemsInRow = rowsMap[yKey].sort((a, b) => a.transform[4] - b.transform[4]);
                   const rowText = itemsInRow.map(it => it.str).join(' ').trim();
                   
-                  if (rowText.length > 5) {
+                  if (rowText.length > 1) {
                     extractedData.push(rowText);
                   }
                 });
               }
 
-              const consolidatedData = [];
-              let currentPendingLine = "";
-
-              extractedData.forEach(line => {
-                const hasComma = line.includes(',');
-
-                if (hasComma && !line.toLowerCase().includes('profesor') && !line.toLowerCase().includes('alumno/a')) {
-                  if (currentPendingLine) {
-                    consolidatedData.push(currentPendingLine);
-                  }
-                  currentPendingLine = line; 
-                } else {
-                  const lower = line.toLowerCase();
-                  const isHeaderOrFooter = lower.includes('teléfono') || lower.includes('urgencia') || lower.includes('unidad') || lower.includes('tutor') || lower.includes('página') || lower.includes('ies') || lower.includes('odiel') || lower.includes('alumno/a') || lower.includes('profesor');
-                  
-                  if (!isHeaderOrFooter && line.trim().length > 0) {
-                    if (currentPendingLine) {
-                      currentPendingLine += " " + line.trim();
-                    }
-                  }
-                }
-              });
-              
-              if (currentPendingLine) {
-                consolidatedData.push(currentPendingLine);
-              }
-
-              const finalExtractedData = type === 'students' ? consolidatedData : extractedData;
-
               if (type === 'students') {
                 const unitRegex = /\b([1-4]\s?º?\s?ESO(?:\s?[A-Z])?|[1-2]\s?º?\s?BACH(?:\s?[A-Z])?|FPB(?:\s?[A-Z])?|PRAGE|CFGM(?:\s?[A-Z])?|CFGS(?:\s?[A-Z])?|[1-2]º?\s?G\.\s?[A-Z\s]+)\b/i;
                 const phoneRegex = /\b[6789]\d{8}\b/g;
+                
                 const listadoAlumnosFinal = [];
+                let currentStudent = null;
 
-                finalExtractedData.forEach((line, idx) => {
-                  if (line.includes(',')) {
-                    const match = line.match(unitRegex);
-                    if (match) {
-                      const phonesInLine = line.match(phoneRegex) || [];
-                      const uniquePhones = [...new Set(phonesInLine)];
-                      
-                      let name = line.replace(unitRegex, '');
-                      name = name.replace(phoneRegex, ''); 
-                      name = name.replace(/\s+/g, ' ').trim(); 
-                      name = name.replace(/^[, \t]+|[, \t]+$/g, '').trim();
+                extractedData.forEach((line, idx) => {
+                  const lower = line.toLowerCase();
+                  const isHeaderOrFooter = lower.includes('teléfono') || lower.includes('urgencia') || lower.includes('unidad') || lower.includes('tutor') || lower.includes('página') || lower.includes('ies') || lower.includes('odiel') || lower.includes('alumno/a') || lower.includes('profesor');
 
-                      listadoAlumnosFinal.push({
-                        id: `s-${idx}-${Date.now()}`,
-                        name,
-                        unit: match[0].toUpperCase(),
-                        phone1: uniquePhones[0] || 'No disponible',
-                        phone2: uniquePhones[1] || 'No disponible'
-                      });
+                  if (isHeaderOrFooter) return;
+
+                  const match = line.match(unitRegex);
+                  if (match) {
+                    const phonesInLine = line.match(phoneRegex) || [];
+                    const uniquePhones = [...new Set(phonesInLine)];
+                    
+                    let name = line.replace(match[0], ''); 
+                    name = name.replace(phoneRegex, ''); 
+                    name = name.replace(/\s+/g, ' ').trim(); 
+
+                    currentStudent = {
+                      id: `s-${idx}-${Date.now()}`,
+                      name: name,
+                      unit: match[0].toUpperCase(),
+                      phone1: uniquePhones[0] || 'No disponible',
+                      phone2: uniquePhones[1] || 'No disponible'
+                    };
+                    listadoAlumnosFinal.push(currentStudent);
+                  } else if (line.trim().length > 1 && currentStudent) {
+                    let extraName = line.replace(phoneRegex, '').replace(/\s+/g, ' ').trim();
+                    if (extraName) {
+                      currentStudent.name = currentStudent.name + " " + extraName;
+                      currentStudent.name = currentStudent.name.replace(/\s+/g, ' ').trim();
                     }
                   }
                 });
 
+                listadoAlumnosFinal.forEach(s => {
+                    s.name = s.name.replace(/^[, \t]+|[, \t]+$/g, '').trim();
+                });
+
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'school_data', 'students'), { list: listadoAlumnosFinal });
                 showToast(`Cargados ${listadoAlumnosFinal.length} alumnos`);
+
               } else if (type === 'teachers') {
                 const teachers = {};
                 const dniRegex = /\d{8}[A-Z]/i;
-                finalExtractedData.forEach(line => {
+                extractedData.forEach(line => {
                   const dniMatch = line.match(dniRegex);
                   if (dniMatch) {
                     const userMatch = line.match(/\b[a-zA-Z]{3,10}\d{1,4}\b/);
@@ -694,9 +680,9 @@
               {showResetConfirm && (
                 <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-6 z-[150] backdrop-blur-sm">
                   <div className="bg-slate-800 p-6 rounded-[2rem] border border-slate-700 max-w-sm w-full text-center space-y-6">
-                    <p className="text-xl font-black text-red-500 uppercase tracking-tight">⚠️ Borrado Completo</p>
+                    <p className="text-xl font-black text-red-500 uppercase tracking-tight">⚠️ Borrado del Historial</p>
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      Esta acción eliminará de forma irreversible **TODAS** las salidas guardadas y la base de datos de alumnos para empezar de cero. ¿Estás seguro?
+                      Esta acción eliminará de forma irreversible **TODAS** las salidas y llamadas guardadas para empezar de cero, conservando el listado de alumnos y profesores. ¿Estás seguro?
                     </p>
                     <div className="flex gap-2">
                       <button onClick={handleResetAllData} className="flex-1 bg-red-600 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest active:scale-95 transition-transform">Sí, Borrar Todo</button>
