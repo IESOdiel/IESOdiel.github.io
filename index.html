@@ -195,14 +195,17 @@
           loadProfile();
         }, [user]);
 
+        // Extraemos las unidades ignorando a los alumnos sin unidad o con unidades en blanco/"S/A"
         const units = useMemo(() => {
-          const u = [...new Set(students.map(s => s.unit))];
+          const u = [...new Set(students.filter(s => s.unit && s.unit !== 'S/A').map(s => s.unit))];
           return u.filter(Boolean).sort();
         }, [students]);
 
+        // Filtramos a los alumnos para que NO aparezcan los que carecen de unidad o "S/A"
         const filteredStudents = useMemo(() => {
-          if (!searchTerm && !selectedUnit) return students.slice(0, 50);
-          return students.filter(s => {
+          const validStudents = students.filter(s => s.unit && s.unit !== 'S/A');
+          if (!searchTerm && !selectedUnit) return validStudents.slice(0, 50);
+          return validStudents.filter(s => {
             const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
             const matchUnit = selectedUnit ? s.unit === selectedUnit : true;
             return matchSearch && matchUnit;
@@ -293,7 +296,6 @@
             let current = new Date(startYear);
             let totalDeleted = 0;
 
-            // Únicamente recorremos y borramos las colecciones de registros diarios (salidas y llamadas)
             while (current <= today) {
               const dateStr = current.toISOString().split('T')[0];
               const querySnapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `records_${dateStr}`));
@@ -310,7 +312,6 @@
               current.setDate(current.getDate() + 1);
             }
 
-            // Ya NO se borra la lista de alumnos ni se limpia el estado setStudents([])
             showToast(`Historial restaurado. ${totalDeleted} registros eliminados.`);
             setShowResetConfirm(false);
           } catch (err) {
@@ -380,28 +381,22 @@
           }
         };
 
-        // Procesador de archivos dual: Maneja tanto EXCEL (.xlsx, .csv) como PDF
         const processFile = async (file, type) => {
           if (!file) return;
           setIsProcessing(true);
           try {
             const fileName = file.name.toLowerCase();
             
-            // ========================================================
-            // LÓGICA DE PROCESADO PARA EXCEL / CSV (NUEVO MÉTODO IDEAL)
-            // ========================================================
             if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
               const arrayBuffer = await file.arrayBuffer();
               const workbook = XLSX.read(arrayBuffer, { type: 'array' });
               const firstSheetName = workbook.SheetNames[0];
               const worksheet = workbook.Sheets[firstSheetName];
               
-              // Exportamos la hoja a un array de arrays para identificar las columnas por su texto
               const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
               if (jsonData.length < 2) throw new Error("Archivo vacío o sin datos");
 
-              // Buscar la fila real que contiene las cabeceras (Ignorando títulos de la Junta de Andalucía, etc.)
               let headerRowIndex = 0;
               for (let r = 0; r < Math.min(15, jsonData.length); r++) {
                   const rowStr = jsonData[r].map(c => String(c || '').toLowerCase()).join(' ');
@@ -426,14 +421,17 @@
                 const listadoAlumnosFinal = [];
                 
                 dataRows.forEach((row, idx) => {
-                  if (nameIdx === -1 || !row[nameIdx]) return; // Evitar filas vacías
+                  if (nameIdx === -1 || !row[nameIdx]) return;
                   
                   const nameValue = String(row[nameIdx]);
                   if (!nameValue || nameValue.toLowerCase().includes('alumno/a')) return;
 
                   const name = nameValue.replace(/[\r\n]+/g, ' ').trim();
-                  const unit = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).trim().toUpperCase() : 'S/A';
+                  const unitRaw = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).trim().toUpperCase() : '';
                   
+                  // Ignorar los que no tienen unidad directamente aquí
+                  if (!unitRaw || unitRaw === 'S/A' || unitRaw === 'NO DISPONIBLE') return;
+
                   const extractPhone = (val) => {
                       if (!val) return 'No disponible';
                       const digits = String(val).replace(/\D/g, '');
@@ -443,7 +441,7 @@
                   listadoAlumnosFinal.push({
                     id: `s-${idx}-${Date.now()}`,
                     name: name,
-                    unit: unit,
+                    unit: unitRaw,
                     phone1: extractPhone(p1Idx !== -1 ? row[p1Idx] : null),
                     phone2: extractPhone(p2Idx !== -1 ? row[p2Idx] : null)
                   });
@@ -464,7 +462,6 @@
                    const name = String(row[nameIdx]).trim();
                    const dni = dniIdx !== -1 && row[dniIdx] ? String(row[dniIdx]).trim().toUpperCase() : '';
                    
-                   // Si no existe la columna de IdEA explícita, se usa el DNI como respaldo de validación
                    const idea = userIdx !== -1 && row[userIdx] ? String(row[userIdx]).trim().toLowerCase() : (dni ? dni.toLowerCase() : '');
                    
                    if (idea && name && dni) {
@@ -476,9 +473,6 @@
                 showToast(`Cargados ${Object.keys(teachers).length} profesores desde Excel`);
               }
             } 
-            // ========================================================
-            // LÓGICA DE RESPALDO PARA PDF (LA QUE YA EXISTÍA)
-            // ========================================================
             else if (fileName.endsWith('.pdf')) {
               const arrayBuffer = await file.arrayBuffer();
               const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -542,7 +536,12 @@
                       phone1: uniquePhones[0] || 'No disponible',
                       phone2: uniquePhones[1] || 'No disponible'
                     };
-                    listadoAlumnosFinal.push(currentStudent);
+                    // Aseguramos que la unidad no esté vacía por error antes de añadir
+                    if (currentStudent.unit && currentStudent.unit !== 'S/A') {
+                        listadoAlumnosFinal.push(currentStudent);
+                    } else {
+                        currentStudent = null; // Lo invalidamos
+                    }
                   } else if (line.trim().length > 1 && currentStudent) {
                     let extraName = line.replace(phoneRegex, '').replace(/\s+/g, ' ').trim();
                     if (extraName) {
@@ -909,6 +908,7 @@
                   {records.map(record => {
                     const s = students.find(x => x.id === record.studentId);
                     const studentName = s ? s.name : "Alumno Externo";
+                    const studentUnit = s ? s.unit : "---";
                     const time = new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     const date = new Date(record.timestamp).toLocaleDateString([], { day: '2-digit', month: '2-digit' });
                     const reasonIcon = record.reason === 'baño' ? '🚻' : '📞';
@@ -928,6 +928,7 @@
                             <div className="flex-1 min-w-0 pl-4 pr-2">
                               <p className="text-xs font-black text-slate-800 uppercase truncate mb-1">{studentName}</p>
                               <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-1.5 py-0.5 rounded">{studentUnit}</span>
                                 <span className="text-[10px] font-medium text-slate-600">{reasonIcon} {reason}</span>
                                 <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">👤 {formatDisplayName(record.teacherName)}</span>
                               </div>
